@@ -199,8 +199,8 @@
     flex-direction:column;align-items:center;justify-content:center}
   #lightbox.open{display:flex}
 
-  .lb-img-wrap{flex:1;display:flex;align-items:center;justify-content:center;
-    width:100%;padding:50px 80px;min-height:0;position:relative}
+  .lb-img-wrap{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;
+    width:100%;padding:0;min-height:0;position:relative}
   #lightbox-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;
     box-shadow:0 24px 80px rgba(0,0,0,.8);user-select:none;
     -webkit-user-drag:none;pointer-events:none}
@@ -547,6 +547,16 @@
         <button class="btn btn-primary" onclick="changePassword()" data-i18n="account.changepw_btn"></button>
       </div>
     </div>
+    <div class="card" style="max-width:440px">
+      <div class="card-header" data-i18n="settings.title"></div>
+      <div style="padding:20px">
+        <label class="checkbox-row" style="margin:0">
+          <input type="checkbox" id="wm-toggle" onchange="localStorage.setItem('vermeer_wm',this.checked?'1':'0')">
+          <span data-i18n="settings.watermark"></span>
+        </label>
+        <p style="color:var(--muted);font-size:12px;margin-top:8px" data-i18n="settings.watermark_hint"></p>
+      </div>
+    </div>
     <div class="card" style="max-width:440px" id="export-card">
       <div class="card-header">Export</div>
       <div style="padding:20px">
@@ -820,6 +830,7 @@ const T = {
     'reccode.confirm':'Ich habe den Recovery-Code sicher gespeichert',
     'reccode.continue':'Weiter zur App',
     'reccode.copied':'Code kopiert',
+    'reccode.copy_manual':'Kopieren blockiert – Code ist markiert, bitte Strg+C drücken',
     'recover.title':'Konto wiederherstellen',
     'recover.desc':'Mit deinem Recovery-Code kannst du ein neues Passwort setzen und behältst Zugriff auf deine Fotos.',
     'recover.submit':'Wiederherstellen',
@@ -848,6 +859,8 @@ const T = {
     'hide.btn':'🙈 Verstecken','hide.unhide_btn':'👁 Sichtbar machen',
     'hide.pin_invalid':'PIN muss genau 4 Ziffern haben',
     'tile.hidden_album':'Verstecktes Album','tile.subalbums':(n)=>`${n} Unteralbum${n!==1?'en':''}`,
+    'settings.title':'Anzeige','settings.watermark':'Wasserzeichen in der Großansicht anzeigen',
+    'settings.watermark_hint':'Blendet „Vermeer · Benutzername“ halbtransparent über Fotos in der Lightbox ein.',
     'export.btn':'📦 Alle meine Fotos exportieren (ZIP)','export.hint':'Lädt alle deine Fotos entschlüsselt als ZIP-Archiv herunter – sortiert nach Alben.',
     'home.title':'⌂ Alben','album.locked_toast':'Album ist gesperrt – PIN erforderlich',
     'relogin.required':'Sitzungsschlüssel fehlt – bitte neu anmelden',
@@ -940,6 +953,7 @@ const T = {
     'reccode.confirm':'I have safely stored the recovery code',
     'reccode.continue':'Continue to app',
     'reccode.copied':'Code copied',
+    'reccode.copy_manual':'Copy blocked – code is selected, please press Ctrl+C',
     'recover.title':'Restore Account',
     'recover.desc':'With your recovery code you can set a new password and keep access to your photos.',
     'recover.submit':'Restore',
@@ -968,6 +982,8 @@ const T = {
     'hide.btn':'🙈 Hide','hide.unhide_btn':'👁 Unhide',
     'hide.pin_invalid':'PIN must be exactly 4 digits',
     'tile.hidden_album':'Hidden album','tile.subalbums':(n)=>`${n} sub-album${n!==1?'s':''}`,
+    'settings.title':'Display','settings.watermark':'Show watermark in full view',
+    'settings.watermark_hint':'Overlays “Vermeer · username” semi-transparently on photos in the lightbox.',
     'export.btn':'📦 Export all my photos (ZIP)','export.hint':'Downloads all your photos decrypted as a ZIP archive – organized by album.',
     'home.title':'⌂ Albums','album.locked_toast':'Album is locked – PIN required',
     'relogin.required':'Session key missing – please log in again',
@@ -1053,9 +1069,29 @@ function showRecoveryCode(code){
   document.getElementById('modal-recovery-code').classList.add('open');
 }
 
-function copyRecoveryCode(){
-  const code=document.getElementById('recovery-code-display').textContent;
-  navigator.clipboard?.writeText(code).then(()=>toast(t('reccode.copied'),'success')).catch(()=>{});
+async function copyRecoveryCode(){
+  const el=document.getElementById('recovery-code-display');
+  const code=el.textContent;
+  let copied=false;
+  // 1) Moderne API – nur in Secure Contexts (HTTPS/localhost) verfügbar
+  if(navigator.clipboard&&window.isSecureContext){
+    try{await navigator.clipboard.writeText(code);copied=true;}catch{}
+  }
+  // 2) Fallback für HTTP (z.B. umbrel.local): verstecktes Textfeld + execCommand
+  if(!copied){
+    const ta=document.createElement('textarea');
+    ta.value=code;ta.setAttribute('readonly','');
+    ta.style.position='fixed';ta.style.left='-9999px';ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.select();ta.setSelectionRange(0,code.length);
+    try{copied=document.execCommand('copy');}catch{}
+    document.body.removeChild(ta);
+  }
+  if(copied){toast(t('reccode.copied'),'success');return;}
+  // 3) Letzte Stufe: Code markieren, damit manuell Strg+C möglich ist
+  const range=document.createRange();range.selectNodeContents(el);
+  const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+  toast(t('reccode.copy_manual'),'error');
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
@@ -1135,6 +1171,7 @@ function showPage(name){
   if(name==='users')loadUsers();
   if(name==='stats')loadStats();
   if(name==='observers')loadObservers();
+  if(name==='account'){const w=document.getElementById('wm-toggle');if(w)w.checked=localStorage.getItem('vermeer_wm')==='1';}
 }
 
 
@@ -1530,13 +1567,14 @@ function buildAlbumTile(a){
   if(a.locked){
     const big=document.createElement('div');big.className='at-bigicon';big.textContent='🙈';tile.appendChild(big);
   } else if(a.coverPhotoId){
+    const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':'📁';tile.appendChild(big);
     fetch(`/api/photos/${a.coverPhotoId}/thumb`).then(r=>r.ok?r.blob():null).then(b=>{
       if(!b)return;
       const img=document.createElement('img');img.className='at-cover';img.draggable=false;
       img.src=URL.createObjectURL(b);
+      img.onload=()=>big.remove();   // Icon weg, sobald Cover sichtbar
       tile.insertBefore(img,tile.firstChild);
     }).catch(()=>{});
-    const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':'📁';tile.appendChild(big);
   } else {
     const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':(a.hidden?'🙈':'📁');tile.appendChild(big);
   }
@@ -2162,6 +2200,7 @@ function fmtDate(ts){return new Date(ts).toLocaleDateString(lang==='de'?'de-DE':
     ctx.font = `${Math.max(14, canvas.width * 0.02)}px DM Sans, sans-serif`;
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate(-Math.PI / 6);
+    if(localStorage.getItem('vermeer_wm')!=='1')return;   // Wasserzeichen standardmäßig aus
     const text = `Vermeer · ${username}`;
     const cols = Math.ceil(canvas.width  / 300) + 2;
     const rows = Math.ceil(canvas.height / 150) + 2;
