@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -937,6 +937,32 @@ app.get('/api/photos/:id/thumb', requireAuth, (req, res) => {
     res.set('X-Content-Type-Options', 'nosniff');
     res.send(decryptPhotoFile(f, photo, keyInfo, 'thumb'));
   } catch (e) { console.error('Thumb error:', e.message); res.status(500).json({ error: 'Decryption failed' }); }
+});
+
+// Full-resolution view (same access rules as thumb; for lightbox display)
+app.get('/api/photos/:id/full', requireAuth, (req, res) => {
+  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+  const db = loadDB();
+  const photo = db.photos.find(p => p.id === req.params.id);
+  if (!photo) return res.status(404).json({ error: 'Photo not found' });
+  const me = getUser(db, req);
+  const canView = (photo.shared && me.type !== 'observer') || canViewAlbum(db, req.session.userId, photo.albumId);
+  if (!canView) return res.status(403).json({ error: 'No access' });
+  if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId))
+    return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
+  const referer = req.headers['referer'] || req.headers['origin'] || '';
+  if (referer && !referer.includes(req.headers['host'] || '')) return res.status(403).json({ error: 'Direct access not permitted' });
+  const keyInfo = resolveReadKey(db, photo, req);
+  if (keyInfo.pending) return res.status(423).json({ error: 'Pending', code: 'PENDING' });
+  if (keyInfo.denied) return res.status(401).json({ error: 'Session key missing', code: 'DEK_MISSING' });
+  const f = path.join(PHOTOS_DIR, `${photo.id}.enc`);
+  if (!fs.existsSync(f)) return res.status(404).json({ error: 'File not found' });
+  try {
+    res.set('Content-Type', photo.mimeType || 'image/jpeg');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.send(decryptPhotoFile(f, photo, keyInfo, 'photo'));
+  } catch (e) { console.error('Full view error:', e.message); res.status(500).json({ error: 'Decryption failed' }); }
 });
 
 app.get('/api/photos/:id/download', requireAuth, (req, res) => {

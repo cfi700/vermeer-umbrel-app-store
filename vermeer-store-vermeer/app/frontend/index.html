@@ -1882,9 +1882,9 @@ function renderLightbox(){
     const tmpImg=new Image();
     tmpImg.onload=()=>{
       // Size canvas to fit viewport
-      const maxW=window.innerWidth*0.9;
-      const maxH=(window.innerHeight-120)*0.9;
-      const scale=Math.min(maxW/tmpImg.width,maxH/tmpImg.height,1);
+      const maxW=window.innerWidth;
+      const maxH=window.innerHeight-90;   // Filmstreifen unten
+      const scale=Math.min(maxW/tmpImg.width,maxH/tmpImg.height);   // auch hochskalieren
       canvas.width=tmpImg.width*scale;
       canvas.height=tmpImg.height*scale;
       ctx.drawImage(tmpImg,0,0,canvas.width,canvas.height);
@@ -1898,9 +1898,11 @@ function renderLightbox(){
   if(lbThumbUrls[p.id]){
     // Re-fetch so we get a fresh blob (cached URL was revoked)
     fetch(`/api/photos/${p.id}/thumb`).then(r=>r.blob()).then(b=>drawOnCanvas(URL.createObjectURL(b))).catch(()=>{});
+    fetch(`/api/photos/${p.id}/full`).then(r=>r.ok?r.blob():null).then(b=>{if(b)drawOnCanvas(URL.createObjectURL(b));}).catch(()=>{});
   } else {
     fetch(`/api/photos/${p.id}/thumb`).then(r=>r.blob()).then(b=>{
       const url=URL.createObjectURL(b);lbThumbUrls[p.id]=url;drawOnCanvas(URL.createObjectURL(b));
+      fetch(`/api/photos/${p.id}/full`).then(r=>r.ok?r.blob():null).then(fb=>{if(fb)drawOnCanvas(URL.createObjectURL(fb));}).catch(()=>{});
     }).catch(()=>{});
   }
   // Highlight active strip thumb
