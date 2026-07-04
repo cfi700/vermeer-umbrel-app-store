@@ -1,0 +1,2193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vermeer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+
+  :root {
+    --bg:       #0d0d0f;
+    --surface:  #151518;
+    --surface2: #1c1c21;
+    --border:   #2a2a32;
+    --accent:   #c8a96e;
+    --accent2:  #e8c98a;
+    --text:     #e8e6e0;
+    --muted:    #7a7872;
+    --dim:      #3a3835;
+    --danger:   #c0534a;
+    --r:        8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+
+  /* LOGIN */
+  #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse 80% 40% at 50% -10%,#1e160a 0%,var(--bg) 70%);position:relative}
+  .lang-toggle-login{position:absolute;top:20px;right:20px}
+  .login-card{width:360px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 40px}
+  .login-logo{text-align:center;margin-bottom:40px}
+  .login-logo .icon{font-size:40px;display:block;margin-bottom:14px}
+  .login-logo h1{font-family:'DM Serif Display',serif;font-size:30px;color:var(--accent);letter-spacing:-.5px}
+  .login-logo p{color:var(--muted);font-size:11px;margin-top:5px;letter-spacing:2px;text-transform:uppercase}
+
+  /* LANG TOGGLE */
+  .lang-toggle{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px;flex-shrink:0}
+  .lang-btn{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:16px;border:none;
+    background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;
+    cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1}
+  .lang-btn .flag{font-size:14px}
+  .lang-btn.active{background:var(--accent);color:#0d0c08}
+  .lang-btn:not(.active):hover{color:var(--text)}
+
+  /* FORM */
+  .form-group{margin-bottom:16px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);margin-bottom:7px;font-weight:500}
+  input[type=text],input[type=password],select,textarea{width:100%;background:var(--surface2);border:1px solid var(--border);
+    border-radius:var(--r);padding:10px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  select option{background:var(--surface2)}
+  textarea{resize:vertical;min-height:70px}
+
+  /* BUTTONS */
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--r);border:none;
+    font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+  .btn-primary{background:var(--accent);color:#0d0c08;font-weight:600;justify-content:center}
+  .btn-primary:hover{background:var(--accent2)}
+  .btn-full{width:100%;padding:12px;font-size:14px}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+  .btn-danger{background:transparent;color:var(--danger);border:1px solid rgba(192,83,74,.3)}
+  .btn-danger:hover{background:rgba(192,83,74,.1)}
+  .btn-sm{padding:5px 11px;font-size:12px}
+  .btn-xs{padding:3px 8px;font-size:11px}
+
+  .error-msg{background:rgba(192,83,74,.1);border:1px solid rgba(192,83,74,.3);color:#e07870;
+    padding:10px 14px;border-radius:var(--r);margin-top:12px;font-size:13px}
+
+  /* NAVBAR */
+  #app{display:none;min-height:100vh}
+  .navbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 24px;gap:20px;position:sticky;top:0;z-index:100}
+  .navbar-brand{font-family:'DM Serif Display',serif;font-size:20px;color:var(--accent);flex-shrink:0}
+  .navbar-nav{display:flex;gap:2px;flex:1}
+  .nav-btn{padding:6px 13px;border-radius:6px;border:none;background:transparent;color:var(--muted);
+    font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;font-weight:500}
+  .nav-btn:hover{background:var(--surface2);color:var(--text)}
+  .nav-btn.active{background:var(--surface2);color:var(--accent)}
+  .navbar-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+  .user-info{font-size:12px;color:var(--muted)}
+  .user-info strong{color:var(--accent)}
+  .admin-pill{background:rgba(200,169,110,.15);color:var(--accent);font-size:10px;padding:2px 7px;
+    border-radius:20px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;border:1px solid rgba(200,169,110,.2)}
+
+  /* PAGES */
+  .page{display:none;padding:20px 24px;max-width:1500px;margin:0 auto}
+  .page.active{display:block}
+  .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+  .page-title{font-family:'DM Serif Display',serif;font-size:22px}
+  .enc-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;background:rgba(200,169,110,.1);
+    color:var(--accent);padding:2px 8px;border-radius:20px;border:1px solid rgba(200,169,110,.2);
+    font-family:'DM Sans',sans-serif;font-weight:500;vertical-align:middle;margin-left:8px}
+
+  /* ALBUM LAYOUT */
+  .albums-layout{display:flex;gap:16px;min-height:calc(100vh - 130px)}
+
+  /* Sidebar */
+  .album-sidebar{width:240px;flex-shrink:0;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;max-height:calc(100vh - 130px)}
+  .album-sidebar-header{padding:4px 8px 8px;font-size:11px;text-transform:uppercase;letter-spacing:1px;
+    color:var(--muted);font-weight:500;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);margin-bottom:4px}
+  .tree-node{display:flex;align-items:center;border-radius:7px;cursor:pointer;transition:background .12s;position:relative}
+  .tree-node:hover{background:var(--surface2)}
+  .tree-node.active{background:rgba(200,169,110,.12)}
+  .tree-node.active .tree-label{color:var(--accent)}
+  .tree-indent{flex-shrink:0}
+  .tree-toggle{width:20px;height:30px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;color:var(--muted);font-size:10px;cursor:pointer;border:none;background:transparent}
+  .tree-icon{font-size:14px;flex-shrink:0;padding:0 3px}
+  .tree-label{flex:1;padding:5px 2px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tree-count{font-size:10px;color:var(--muted);padding-right:6px;flex-shrink:0}
+  .tree-actions{display:none;gap:2px;padding-right:4px;flex-shrink:0}
+  .tree-node:hover .tree-actions{display:flex}
+  .tree-action-btn{padding:2px 4px;border-radius:4px;border:none;background:transparent;
+    color:var(--muted);cursor:pointer;font-size:11px;transition:all .12s}
+  .tree-action-btn:hover{background:var(--border);color:var(--text)}
+
+  /* Main content */
+  .album-content{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+
+  /* Content toolbar */
+  .content-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px}
+  .breadcrumb{display:flex;align-items:center;gap:4px;font-size:13px;flex:1;min-width:0;flex-wrap:wrap}
+  .breadcrumb-item{color:var(--muted);cursor:pointer;transition:color .15s;white-space:nowrap}
+  .breadcrumb-item:hover{color:var(--accent)}
+  .breadcrumb-item.current{color:var(--text);cursor:default;font-weight:500}
+  .breadcrumb-sep{color:var(--dim)}
+  .toolbar-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+
+  /* Selection toolbar - shown when photos are selected */
+  .selection-bar{display:none;align-items:center;gap:8px;flex-wrap:wrap;
+    background:rgba(200,169,110,.08);border:1px solid rgba(200,169,110,.25);
+    border-radius:10px;padding:8px 12px}
+  .selection-bar.visible{display:flex}
+  .selection-count{font-size:13px;color:var(--accent);font-weight:500;flex:1}
+
+  /* Upload progress - compact */
+  .upload-progress{display:none;background:var(--surface);border:1px solid var(--border);
+    border-radius:8px;padding:10px 14px;font-size:13px}
+  .upload-progress.visible{display:block}
+  .progress-wrap{background:var(--surface2);border-radius:100px;height:4px;margin-top:8px}
+  .progress-bar{height:100%;background:var(--accent);border-radius:100px;width:0%;transition:width .3s}
+  #file-input{display:none}
+
+  /* Sub-album grid */
+  .subalbum-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+  .subalbum-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:12px 10px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:4px}
+  .subalbum-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .subalbum-card .sa-icon{font-size:24px}
+  .subalbum-card .sa-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .subalbum-card .sa-count{font-size:11px;color:var(--muted)}
+  .subalbum-card .sa-cover{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;
+    user-select:none;-webkit-user-drag:none;display:block}
+
+  /* Photo grid */
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+  .photo-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    overflow:hidden;transition:all .15s;position:relative;cursor:pointer}
+  .photo-img-wrap{position:relative;width:100%;cursor:pointer}
+  .photo-card:hover{border-color:var(--muted)}
+  .photo-card.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(200,169,110,.3)}
+
+  /* Checkbox overlay */
+  .photo-check{position:absolute;top:7px;left:7px;z-index:2;
+    width:20px;height:20px;border-radius:5px;
+    border:2px solid rgba(255,255,255,.6);background:rgba(0,0,0,.3);
+    display:flex;align-items:center;justify-content:center;
+    transition:all .15s;cursor:pointer;backdrop-filter:blur(2px)}
+  .photo-card:hover .photo-check,
+  .photo-card.selected .photo-check{border-color:var(--accent)}
+  .photo-card.selected .photo-check{background:var(--accent)}
+  .photo-check-icon{color:#0d0c08;font-size:12px;font-weight:700;display:none}
+  .photo-card.selected .photo-check-icon{display:block}
+
+  .photo-thumb{width:100%;aspect-ratio:1;object-fit:cover;background:var(--surface2);display:block;cursor:pointer;user-select:none;-webkit-user-drag:none}
+  .thumb-placeholder{width:100%;aspect-ratio:1;background:var(--surface2);display:flex;
+    align-items:center;justify-content:center;font-size:28px;color:var(--dim)}
+  .thumb-loading{animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .photo-info{padding:6px 8px}
+  .photo-name{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+  .photo-meta{font-size:10px;color:var(--muted);display:flex;justify-content:space-between}
+  .owner-tag{font-size:9px;background:var(--surface2);padding:1px 5px;border-radius:3px;border:1px solid var(--border)}
+  .shared-badge{position:absolute;top:7px;right:7px;background:rgba(200,169,110,.85);color:#0d0c08;font-size:9px;font-weight:600;padding:2px 6px;border-radius:10px;backdrop-filter:blur(2px);pointer-events:none}
+
+  /* Empty states */
+  .empty-state{text-align:center;padding:48px 24px;color:var(--muted)}
+  .empty-state .e-icon{font-size:40px;margin-bottom:12px}
+  .empty-state p{font-size:14px}
+  .no-album-selected{display:flex;align-items:center;justify-content:center;flex:1;flex-direction:column;
+    gap:14px;color:var(--muted);text-align:center;padding:48px}
+  .no-album-selected .big-icon{font-size:52px;opacity:.4}
+
+  /* LIGHTBOX */
+  #lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:1000;
+    flex-direction:column;align-items:center;justify-content:center}
+  #lightbox.open{display:flex}
+
+  .lb-img-wrap{flex:1;display:flex;align-items:center;justify-content:center;
+    width:100%;padding:50px 80px;min-height:0;position:relative}
+  #lightbox-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;
+    box-shadow:0 24px 80px rgba(0,0,0,.8);user-select:none;
+    -webkit-user-drag:none;pointer-events:none}
+
+  /* Transparent overlay over lightbox image - blocks right-click on img element */
+  .lb-img-overlay{position:absolute;inset:0;z-index:1;cursor:default}
+
+  /* Nav arrows */
+  .lb-arrow{position:absolute;top:50%;transform:translateY(-50%);
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--text);
+    width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-size:20px;transition:all .15s;z-index:5;backdrop-filter:blur(4px)}
+  .lb-arrow:hover{background:rgba(255,255,255,.18)}
+  .lb-arrow.left{left:16px}
+  .lb-arrow.right{right:16px}
+  .lb-arrow:disabled{opacity:.2;cursor:default}
+
+  /* Lightbox top bar */
+  .lb-topbar{position:fixed;top:0;left:0;right:0;height:52px;
+    display:flex;align-items:center;justify-content:space-between;padding:0 16px;
+    background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent);z-index:10}
+  .lb-title{font-size:13px;color:var(--text);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
+  .lb-counter{font-size:12px;color:var(--muted)}
+  .lb-close{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--text);
+    width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-size:16px;transition:all .15s}
+  .lb-close:hover{background:rgba(255,255,255,.18)}
+
+  /* Lightbox filmstrip */
+  .lb-strip{height:72px;width:100%;display:flex;align-items:center;gap:4px;
+    padding:8px 16px;overflow-x:auto;background:rgba(0,0,0,.5);flex-shrink:0;
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+  .lb-strip-thumb{height:54px;width:54px;object-fit:cover;border-radius:4px;
+    cursor:pointer;opacity:.5;transition:all .15s;flex-shrink:0;border:2px solid transparent}
+  .lb-strip-thumb.active{opacity:1;border-color:var(--accent)}
+  .lb-strip-thumb:hover{opacity:.85}
+
+  /* TABLE */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
+  .card-header{padding:12px 18px;background:var(--surface2);border-bottom:1px solid var(--border);
+    font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:500}
+  table{width:100%;border-collapse:collapse}
+  th{padding:10px 16px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px;
+    color:var(--muted);background:var(--surface2);font-weight:500;border-bottom:1px solid var(--border)}
+  td{padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,.015)}
+  .td-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+  /* MODAL */
+  .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;
+    align-items:center;justify-content:center;padding:20px}
+  .modal-backdrop.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:460px;max-width:100%}
+  .modal-lg{width:600px}
+  .modal h2{font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:20px}
+  .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+  .perm-tree{max-height:280px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:6px}
+  .perm-album-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13px}
+  .perm-album-item:hover{background:rgba(255,255,255,.04)}
+  .perm-album-item input[type=checkbox]{width:auto;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+  .perm-album-owner{font-size:10px;color:var(--muted);margin-left:auto;flex-shrink:0}
+  .perm-album-indent{flex-shrink:0}
+
+  /* TOAST */
+  #toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;padding:12px 18px;font-size:13px;z-index:2000;transform:translateY(80px);opacity:0;
+    transition:all .25s cubic-bezier(.4,0,.2,1);max-width:300px;pointer-events:none}
+  #toast.show{transform:none;opacity:1}
+  #toast.success{border-color:rgba(90,158,111,.4);color:#80c898}
+  #toast.error{border-color:rgba(192,83,74,.4);color:#e07870}
+
+  .actions-row{display:flex;gap:6px;flex-wrap:wrap}
+  .divider{height:1px;background:var(--border);margin:4px 0}
+
+  /* ── STATS DASHBOARD ── */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 14px;text-align:center}
+  .stat-value{font-family:'DM Serif Display',serif;font-size:28px;color:var(--accent);line-height:1}
+  .stat-label{font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.8px}
+  .stats-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .stats-section-header{padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);
+    font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--muted);
+    display:flex;align-items:center;gap:8px}
+  .stats-table{width:100%;border-collapse:collapse}
+  .stats-table th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;
+    letter-spacing:.8px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)}
+  .stats-table td{padding:9px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle}
+  .stats-table tr:last-child td{border-bottom:none}
+  .stats-table tr:hover td{background:rgba(255,255,255,.015)}
+  .rank-badge{display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:700;
+    background:var(--surface2);color:var(--muted);flex-shrink:0}
+  .rank-badge.gold{background:rgba(200,169,110,.2);color:var(--accent)}
+  .rank-badge.silver{background:rgba(180,180,180,.15);color:#aaa}
+  .rank-badge.bronze{background:rgba(180,120,80,.15);color:#c8916e}
+  .bar-wrap{background:var(--surface2);border-radius:100px;height:6px;width:100%;min-width:80px}
+  .bar-fill{height:100%;border-radius:100px;background:var(--accent);transition:width .4s}
+  .timeline-chart{padding:16px;display:flex;align-items:flex-end;gap:3px;height:100px;overflow-x:auto}
+  .tl-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:20px}
+  .tl-bar{background:var(--accent);border-radius:3px 3px 0 0;width:100%;transition:height .3s;opacity:.8;min-height:2px}
+  .tl-bar:hover{opacity:1}
+  .tl-label{font-size:9px;color:var(--muted);white-space:nowrap;writing-mode:vertical-rl;
+    text-orientation:mixed;transform:rotate(180deg);height:36px;overflow:hidden}
+  .shared-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;margin-right:4px}
+
+
+  /* ── SETUP / RECOVERY MODALS ── */
+  .recovery-code-box{background:var(--surface2);border:2px dashed var(--accent);border-radius:10px;
+    padding:18px;text-align:center;font-family:monospace;font-size:17px;letter-spacing:1.5px;
+    color:var(--accent);margin:14px 0;user-select:all;word-break:break-all}
+  .warn-box{background:rgba(192,83,74,.08);border:1px solid rgba(192,83,74,.3);border-radius:8px;
+    padding:12px 14px;font-size:12px;color:#e0a49e;margin:12px 0;line-height:1.5}
+  .info-box{background:rgba(200,169,110,.06);border:1px solid rgba(200,169,110,.25);border-radius:8px;
+    padding:12px 14px;font-size:12px;color:var(--muted);margin:12px 0;line-height:1.5}
+  .checkbox-row{display:flex;align-items:flex-start;gap:9px;margin:14px 0;font-size:13px;cursor:pointer}
+  .checkbox-row input{width:auto;accent-color:var(--accent);margin-top:2px;cursor:pointer}
+  .link-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;
+    text-decoration:underline;font-family:'DM Sans',sans-serif;padding:0;margin-top:14px;display:block;width:100%;text-align:center}
+  .link-btn:hover{color:var(--accent)}
+  .thumb-pending{width:100%;aspect-ratio:1;background:var(--surface2);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:11px;text-align:center;padding:8px}
+  .thumb-pending .tp-icon{font-size:24px;opacity:.5}
+
+
+  /* ── TILE VIEW (v1.0.0) ── */
+  .albums-layout{display:block !important}
+  .album-sidebar{display:none !important}
+  .album-content{width:100%}
+  .album-tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+  .album-tile{position:relative;aspect-ratio:16/10;border-radius:12px;overflow:hidden;cursor:pointer;
+    background:linear-gradient(135deg,var(--surface2),var(--surface));border:1px solid var(--border);
+    transition:transform .15s,border-color .15s;user-select:none;-webkit-user-select:none}
+  .album-tile:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .album-tile .at-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    user-select:none;-webkit-user-drag:none;pointer-events:none}
+  .album-tile .at-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.75) 0%,rgba(0,0,0,.15) 55%,transparent 100%)}
+  .album-tile .at-info{position:absolute;left:10px;right:10px;bottom:8px;z-index:2}
+  .album-tile .at-name{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .album-tile .at-meta{font-size:11px;color:rgba(255,255,255,.75);display:flex;gap:8px;align-items:center}
+  .album-tile .at-bigicon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:38px;opacity:.5}
+  .album-tile.locked .at-bigicon{opacity:.85}
+  .album-tile .at-actions{position:absolute;top:6px;right:6px;z-index:3;display:none;gap:4px}
+  .album-tile:hover .at-actions{display:flex}
+  .album-tile.show-actions .at-actions{display:flex}
+  .at-act-btn{width:28px;height:28px;border-radius:7px;border:none;cursor:pointer;font-size:13px;
+    background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center}
+  .at-act-btn:hover{background:rgba(0,0,0,.8)}
+  .section-label{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:14px 2px 8px;font-weight:600}
+  .pin-input{width:100%;text-align:center;font-size:28px;letter-spacing:14px;font-family:monospace;padding:12px}
+
+  /* ── MOBILE ── */
+  @media (max-width:640px){
+    .navbar{padding:0 10px;gap:8px;flex-wrap:wrap;height:auto;min-height:52px}
+    .navbar-brand{font-size:16px}
+    .nav-btn{padding:6px 9px;font-size:12px}
+    .user-info{display:none}
+    .page{padding:12px 10px}
+    .album-tile-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+    .photo-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr)) !important;gap:6px}
+    .selection-bar.visible{position:fixed;left:8px;right:8px;bottom:8px;z-index:200;
+      box-shadow:0 6px 30px rgba(0,0,0,.6);background:var(--surface)}
+    .photo-check{width:26px;height:26px}
+    .content-toolbar{position:sticky;top:56px;z-index:50}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="lang-toggle-login">
+    <div class="lang-toggle">
+      <button class="lang-btn" id="lang-login-de" onclick="setLang('de')"><span class="flag">🇩🇪</span> DE</button>
+      <button class="lang-btn" id="lang-login-en" onclick="setLang('en')"><span class="flag">🇬🇧</span> EN</button>
+    </div>
+  </div>
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="icon">🖼</span>
+      <h1>Vermeer</h1>
+      <p data-i18n="login.tagline"></p>
+    </div>
+    <div class="form-group">
+      <label data-i18n="login.username"></label>
+      <input type="text" id="l-user" data-i18n-ph="login.username" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label data-i18n="login.password"></label>
+      <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="doLogin()" data-i18n="login.submit"></button>
+    <div id="login-err" class="error-msg" style="display:none"></div>
+    <button class="link-btn" onclick="openRecoverModal()" data-i18n="login.forgot"></button>
+  </div>
+</div>
+
+<!-- MODAL: First-login password setup -->
+<div class="modal-backdrop" id="modal-setup-pw">
+  <div class="modal">
+    <h2 data-i18n="setup.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px" data-i18n="setup.desc"></p>
+    <div class="warn-box" id="setup-existing-warn" style="display:none" data-i18n="setup.existing_warn"></div>
+    <div class="form-group" id="setup-recovery-group" style="display:none">
+      <label data-i18n="setup.recovery_label"></label>
+      <input type="text" id="setup-recovery" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx">
+    </div>
+    <div class="form-group">
+      <label data-i18n="setup.new_pw"></label>
+      <input type="password" id="setup-pw" data-i18n-ph="setup.pw_min">
+    </div>
+    <div class="form-group">
+      <label data-i18n="account.confirm_pw"></label>
+      <input type="password" id="setup-pw2" placeholder="••••••••">
+    </div>
+    <div class="info-box" data-i18n="setup.info"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-full" onclick="doSetupPassword()" data-i18n="setup.submit"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Recovery code display (shown ONCE) -->
+<div class="modal-backdrop" id="modal-recovery-code">
+  <div class="modal">
+    <h2 data-i18n="reccode.title"></h2>
+    <p style="color:var(--muted);font-size:13px" data-i18n="reccode.desc"></p>
+    <div class="recovery-code-box" id="recovery-code-display"></div>
+    <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="copyRecoveryCode()" data-i18n="reccode.copy"></button>
+    <div class="warn-box" data-i18n="reccode.warn"></div>
+    <label class="checkbox-row">
+      <input type="checkbox" id="reccode-confirm">
+      <span data-i18n="reccode.confirm"></span>
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-full" id="reccode-continue" onclick="confirmRecoveryCode()" disabled data-i18n="reccode.continue"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Account recovery (forgot password) -->
+<div class="modal-backdrop" id="modal-recover">
+  <div class="modal">
+    <h2 data-i18n="recover.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px" data-i18n="recover.desc"></p>
+    <div class="form-group"><label data-i18n="login.username"></label><input type="text" id="rec-user"></div>
+    <div class="form-group"><label data-i18n="setup.recovery_label"></label><input type="text" id="rec-code" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx"></div>
+    <div class="form-group"><label data-i18n="setup.new_pw"></label><input type="password" id="rec-pw" data-i18n-ph="setup.pw_min"></div>
+    <div id="rec-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-recover')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="doRecover()" data-i18n="recover.submit"></button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav class="navbar">
+    <div class="navbar-brand">🖼 Vermeer</div>
+    <div class="navbar-nav">
+      <button class="nav-btn active" id="nav-albums"  onclick="showPage('albums')"  data-i18n="nav.albums"></button>
+      <button class="nav-btn"        id="nav-users"   onclick="showPage('users')"   data-i18n="nav.users" style="display:none"></button>
+      <button class="nav-btn"        id="nav-observers" onclick="showPage('observers')" data-i18n="nav.observers" style="display:none"></button>
+      <button class="nav-btn"        id="nav-stats"   onclick="showPage('stats')"   data-i18n="nav.stats" style="display:none"></button>
+      <button class="nav-btn"        id="nav-account" onclick="showPage('account')" data-i18n="nav.account"></button>
+    </div>
+    <div class="navbar-right">
+      <span class="user-info" id="logged-in-label"></span>
+      <span class="admin-pill" id="admin-pill" style="display:none">Admin</span>
+      <div class="lang-toggle">
+        <button class="lang-btn" id="lang-app-de" onclick="setLang('de')"><span class="flag">🇩🇪</span> DE</button>
+        <button class="lang-btn" id="lang-app-en" onclick="setLang('en')"><span class="flag">🇬🇧</span> EN</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="nav.logout"></button>
+    </div>
+  </nav>
+
+  <!-- ALBUMS PAGE -->
+  <div class="page active" id="page-albums">
+    <div class="page-header">
+      <h2 class="page-title"><span data-i18n="albums.title"></span><span class="enc-badge">🔒 AES-256</span></h2>
+      <button class="btn btn-primary btn-sm" onclick="openNewAlbumModal(null)" data-i18n="albums.new_root"></button>
+    </div>
+    <div class="albums-layout">
+      <div class="album-content" id="album-content">
+        <div class="no-album-selected">
+          <div class="big-icon">📁</div>
+          <p data-i18n="albums.select_hint"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- USERS PAGE -->
+  <div class="page" id="page-users">
+    <div class="page-header">
+      <h2 class="page-title" data-i18n="users.title"></h2>
+      <button class="btn btn-primary btn-sm" onclick="openNewUserModal()" data-i18n="users.new"></button>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th data-i18n="users.col.username"></th>
+          <th data-i18n="users.col.role"></th>
+          <th data-i18n="users.col.created"></th>
+          <th data-i18n="users.col.album_access"></th>
+          <th data-i18n="users.col.actions"></th>
+        </tr></thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- OBSERVERS PAGE (main users) -->
+  <div class="page" id="page-observers">
+    <div class="page-header">
+      <h2 class="page-title" data-i18n="obs.title"></h2>
+      <button class="btn btn-primary btn-sm" onclick="openNewObserverModal()" data-i18n="obs.new"></button>
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px" data-i18n="obs.desc"></p>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th data-i18n="users.col.username"></th>
+          <th data-i18n="users.col.created"></th>
+          <th data-i18n="obs.col.albums"></th>
+          <th data-i18n="users.col.actions"></th>
+        </tr></thead>
+        <tbody id="observers-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ACCOUNT PAGE -->
+  <div class="page" id="page-account">
+    <div class="page-header"><h2 class="page-title" data-i18n="account.title"></h2></div>
+    <div class="card" style="max-width:440px">
+      <div class="card-header" data-i18n="account.changepw"></div>
+      <div style="padding:20px">
+        <div class="form-group"><label data-i18n="account.current_pw"></label><input type="password" id="pw-current" data-i18n-ph="account.current_pw"></div>
+        <div class="form-group"><label data-i18n="account.new_pw"></label><input type="password" id="pw-new" data-i18n-ph="account.pw_min"></div>
+        <div class="form-group"><label data-i18n="account.confirm_pw"></label><input type="password" id="pw-confirm" placeholder="••••••••"></div>
+        <button class="btn btn-primary" onclick="changePassword()" data-i18n="account.changepw_btn"></button>
+      </div>
+    </div>
+    <div class="card" style="max-width:440px" id="export-card">
+      <div class="card-header">Export</div>
+      <div style="padding:20px">
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px" data-i18n="export.hint"></p>
+        <button class="btn btn-ghost" onclick="doExport()" data-i18n="export.btn"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS PAGE (admin only) -->
+  <div class="page" id="page-stats">
+    <div class="page-header">
+      <h2 class="page-title" data-i18n="stats.title"></h2>
+      <button class="btn btn-ghost btn-sm" onclick="loadStats()" data-i18n="btn.refresh"></button>
+    </div>
+    <div id="stats-content">
+      <div class="empty-state"><div class="e-icon">⏳</div><p data-i18n="loading"></p></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox">
+  <div class="lb-topbar">
+    <span class="lb-title" id="lb-title"></span>
+    <span class="lb-counter" id="lb-counter"></span>
+    <button class="lb-close" onclick="closeLightbox()">✕</button>
+  </div>
+  <div class="lb-img-wrap">
+    <button class="lb-arrow left" id="lb-prev" onclick="lbNavigate(-1)">&#8249;</button>
+    <div class="lb-img-overlay" id="lb-img-overlay"></div>
+  <canvas id="lightbox-img" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 24px 80px rgba(0,0,0,.8);display:block"></canvas>
+    <button class="lb-arrow right" id="lb-next" onclick="lbNavigate(1)">&#8250;</button>
+  </div>
+  <div class="lb-strip" id="lb-strip"></div>
+</div>
+
+<!-- MODAL: New/Edit Album -->
+<div class="modal-backdrop" id="modal-album">
+  <div class="modal">
+    <h2 id="modal-album-title"></h2>
+    <div class="form-group">
+      <label data-i18n="album.name"></label>
+      <input type="text" id="album-name" data-i18n-ph="album.name_placeholder">
+    </div>
+    <div class="form-group">
+      <label data-i18n="album.description"></label>
+      <textarea id="album-desc" rows="2" data-i18n-ph="album.desc_placeholder"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-album')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" id="album-modal-confirm"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: New User -->
+<div class="modal-backdrop" id="modal-new-user">
+  <div class="modal">
+    <h2 data-i18n="modal.newuser.title"></h2>
+    <div class="form-group"><label data-i18n="login.username"></label><input type="text" id="nu-name" placeholder="max.mustermann"></div>
+    <div class="form-group"><label data-i18n="login.password"></label><input type="password" id="nu-pass" data-i18n-ph="account.pw_min"></div>
+    <div class="form-group">
+      <label data-i18n="modal.newuser.role"></label>
+      <select id="nu-role">
+        <option value="user"  data-i18n="role.user"></option>
+        <option value="admin" data-i18n="role.admin"></option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-user')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="createUser()" data-i18n="btn.create"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Album Permissions -->
+<div class="modal-backdrop" id="modal-album-perm">
+  <div class="modal modal-lg">
+    <h2 data-i18n="modal.albumperm.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+      <span data-i18n="modal.albumperm.desc"></span>
+      <strong id="albumperm-uname" style="color:var(--text)"></strong>
+      <span data-i18n="modal.albumperm.desc2"></span>
+    </p>
+    <div class="perm-tree" id="album-perm-tree"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-album-perm')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="saveAlbumPermissions()" data-i18n="btn.save"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Reset PW -->
+<div class="modal-backdrop" id="modal-reset-pw">
+  <div class="modal">
+    <h2 data-i18n="modal.resetpw.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+      <span data-i18n="modal.resetpw.desc"></span> <strong id="reset-uname" style="color:var(--text)"></strong>:
+    </p>
+    <div class="form-group"><input type="password" id="reset-pw" data-i18n-ph="account.pw_min"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-reset-pw')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="doResetPassword()" data-i18n="btn.set"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: PIN unlock -->
+<div class="modal-backdrop" id="modal-pin">
+  <div class="modal" style="width:340px">
+    <h2 data-i18n="pin.unlock_title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px"><span id="pin-album-name" style="color:var(--text)"></span></p>
+    <div class="form-group">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="pin-input" class="pin-input" placeholder="••••" autocomplete="off">
+    </div>
+    <div id="pin-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-pin')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="doUnlockAlbum()" data-i18n="pin.unlock_btn"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Hide album (set PIN) / unhide -->
+<div class="modal-backdrop" id="modal-hide">
+  <div class="modal" style="width:380px">
+    <h2 id="hide-modal-title"></h2>
+    <div id="hide-set-group">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px" data-i18n="hide.desc"></p>
+      <div class="form-group">
+        <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="hide-pin" class="pin-input" placeholder="••••" autocomplete="off">
+      </div>
+      <div class="info-box" data-i18n="hide.info"></div>
+    </div>
+    <div id="hide-unset-group" style="display:none">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px" data-i18n="hide.unhide_desc"></p>
+      <div class="form-group"><label data-i18n="account.current_pw"></label><input type="password" id="hide-account-pw"></div>
+    </div>
+    <div id="hide-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-hide')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" id="hide-confirm-btn" onclick="doHideAlbum()"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: New observer -->
+<div class="modal-backdrop" id="modal-new-observer">
+  <div class="modal">
+    <h2 data-i18n="obs.new_title"></h2>
+    <div class="form-group"><label data-i18n="login.username"></label><input type="text" id="no-name"></div>
+    <div class="form-group"><label data-i18n="login.password"></label><input type="password" id="no-pass" data-i18n-ph="account.pw_min"></div>
+    <div class="info-box" data-i18n="obs.new_info"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-observer')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="createObserver()" data-i18n="btn.create"></button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Observer album access -->
+<div class="modal-backdrop" id="modal-obs-albums">
+  <div class="modal modal-lg">
+    <h2 data-i18n="obs.albums_title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+      <strong id="obsalbums-name" style="color:var(--text)"></strong> <span data-i18n="obs.albums_desc"></span>
+    </p>
+    <div class="perm-tree" id="obs-album-tree"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-obs-albums')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="saveObserverAlbums()" data-i18n="btn.save"></button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="handleFiles(this.files)">
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// TRANSLATIONS
+// ═══════════════════════════════════════════════════════════════════
+const T = {
+  de: {
+    'login.tagline':'Verschlüsselte Fotoverwaltung','login.username':'Benutzername',
+    'login.password':'Passwort','login.submit':'Anmelden',
+    'login.err.invalid':'Ungültige Anmeldedaten','login.err.connection':'Verbindungsfehler',
+    'nav.albums':'Alben','nav.users':'Benutzer','nav.account':'Konto',
+    'nav.logout':'Abmelden','nav.loggedinas':'Angemeldet als',
+    'albums.title':'Fotoalben','albums.new_root':'+ Neues Album',
+    'albums.sidebar_title':'Alben','albums.select_hint':'Wähle ein Album aus der Seitenleiste',
+    'albums.new_sub':'+ Unteralbum','albums.rename':'Umbenennen','albums.delete':'Löschen',
+    'albums.empty':'Dieses Album ist noch leer',
+    'albums.no_albums':'Noch keine Alben. Erstelle dein erstes Album!',
+    'albums.confirm_delete':'Album und alle enthaltenen Fotos und Unteralben wirklich löschen?',
+    'albums.deleted':'Album gelöscht','albums.created':'Album erstellt','albums.updated':'Album aktualisiert',
+    'albums.photos_count':(n)=>`${n} Foto${n!==1?'s':''}`,
+    'album.name':'Albumname','album.name_placeholder':'Meine Fotos…',
+    'album.description':'Beschreibung (optional)','album.desc_placeholder':'Kurze Beschreibung…',
+    'album.new_title':'Neues Album anlegen','album.new_sub_title':(p)=>`Unteralbum in »${p}«`,
+    'album.edit_title':(n)=>`Album »${n}« bearbeiten`,
+    'upload.btn':'📤 Hochladen',
+    'upload.encrypting':(n)=>`🔒 Lade ${n} Datei(en) hoch…`,
+    'upload.done':(ok,err)=>`✅ ${ok} Foto(s) gespeichert${err?` · ⚠ ${err} Fehler`:''}`,
+    'upload.fail':'Upload fehlgeschlagen',
+    'upload.toast':(n)=>`${n} Foto(s) hochgeladen`,
+    'selection.none':'Keine Auswahl',
+    'selection.count':(n)=>`${n} Foto${n!==1?'s':''} ausgewählt`,
+    'selection.select_all':'Alle wählen','selection.deselect_all':'Auswahl aufheben',
+    'selection.download':'⬇ Herunterladen','selection.delete':'🗑 Löschen',
+    'selection.confirm_delete':(n)=>`${n} Foto${n!==1?'s':''} wirklich löschen?`,
+    'selection.deleted':(n)=>`${n} Foto${n!==1?'s':''} gelöscht`,
+    'selection.share':'🔗 Teilen','selection.unshare':'🔗 Nicht mehr teilen',
+    'selection.shared':(n)=>`${n} Foto${n!==1?'s':''} geteilt`,
+    'selection.unshared':(n)=>`${n} Foto${n!==1?'s':''} nicht mehr geteilt`,
+    'photo.shared_badge':'Geteilt','shared.album_name':'📢 Geteilte Fotos',
+    'users.title':'Benutzerverwaltung','users.new':'+ Neuer Benutzer',
+    'users.col.username':'Benutzername','users.col.role':'Rolle','users.col.created':'Erstellt',
+    'users.col.album_access':'Album-Zugriff','users.col.actions':'Aktionen',
+    'users.all_albums':'Alle Alben','users.album_rights':'🗂 Albumrechte',
+    'users.reset_pw':'🔑 PW','users.delete':'Löschen','users.me':'Du',
+    'users.deleted':'Benutzer gelöscht','users.created':'Benutzer erstellt',
+    'users.confirm_delete':'Benutzer wirklich löschen?',
+    'users.albums_count':(n)=>`${n} Album${n!==1?'en':''}`,
+    'account.title':'Mein Konto','account.changepw':'Passwort ändern',
+    'account.current_pw':'Aktuelles Passwort','account.new_pw':'Neues Passwort',
+    'account.confirm_pw':'Passwort wiederholen','account.pw_min':'Mindestens 6 Zeichen',
+    'account.changepw_btn':'Passwort ändern','account.pw_changed':'Passwort geändert',
+    'account.pw_mismatch':'Passwörter stimmen nicht überein','account.pw_short':'Passwort mind. 6 Zeichen',
+    'modal.newuser.title':'Neuer Benutzer','modal.newuser.role':'Rolle',
+    'modal.albumperm.title':'Album-Zugriff verwalten',
+    'modal.albumperm.desc':'Alben, die','modal.albumperm.desc2':'sehen darf:',
+    'modal.resetpw.title':'Passwort zurücksetzen','modal.resetpw.desc':'Neues Passwort für',
+    'role.user':'Benutzer','role.admin':'Administrator',
+    'btn.cancel':'Abbrechen','btn.create':'Erstellen','btn.save':'Speichern','btn.set':'Setzen',
+    'perm.saved':'Rechte gespeichert','perm.save_err':'Fehler beim Speichern','pw.set':'Passwort gesetzt',
+    'err.required':'Benutzername und Passwort erforderlich',
+    'loading':'Lade…','error':'Fehler beim Laden',
+    'nav.stats':'Statistik',
+    'stats.title':'Statistik & Auswertung',
+    'stats.overview':'Übersicht',
+    'stats.top_photos':'Meistbetrachtete Fotos',
+    'stats.top_albums':'Meistbetrachtete Alben',
+    'stats.top_viewers':'Aktivste Benutzer (Aufrufe)',
+    'stats.top_uploaders':'Meiste Uploads',
+    'stats.timeline':'Aufrufe letzte 30 Tage',
+    'stats.photo':'Foto','stats.album':'Album','stats.owner':'Besitzer',
+    'stats.views':'Aufrufe','stats.unique':'Einzigartig','stats.downloads':'Downloads',
+    'stats.photos':'Fotos','stats.storage':'Speicher','stats.shared':'Geteilt',
+    'stats.total_photos':'Fotos gesamt','stats.total_albums':'Alben',
+    'stats.total_users':'Benutzer','stats.total_views':'Aufrufe gesamt',
+    'stats.total_downloads':'Downloads','stats.storage_mb':'Speicher (MB)',
+    'stats.no_data':'Noch keine Daten vorhanden',
+    'login.forgot':'Passwort vergessen? Mit Recovery-Code wiederherstellen',
+    'setup.title':'Neues Passwort festlegen',
+    'setup.desc':'Bei der ersten Anmeldung musst du ein eigenes Passwort vergeben. Es dient zugleich als Schlüssel für die Verschlüsselung deiner Fotos.',
+    'setup.existing_warn':'⚠ Dein Passwort wurde vom Admin zurückgesetzt. Gib deinen Recovery-Code ein, um den Zugriff auf deine bestehenden Fotos zu behalten. Ohne Code sind die alten Fotos dauerhaft verschlüsselt!',
+    'setup.recovery_label':'Recovery-Code (optional)',
+    'setup.new_pw':'Neues Passwort',
+    'setup.pw_min':'Mindestens 8 Zeichen',
+    'setup.info':'🔒 Dein Passwort verschlüsselt deine Fotos. Niemand – auch nicht der Admin – kann sie ohne dein Passwort oder deinen Recovery-Code entschlüsseln.',
+    'setup.submit':'Passwort festlegen',
+    'setup.pw_mismatch':'Passwörter stimmen nicht überein',
+    'setup.pw_short':'Passwort mind. 8 Zeichen',
+    'reccode.title':'Dein Recovery-Code',
+    'reccode.desc':'Bewahre diesen Code sicher auf (Passwortmanager, Ausdruck). Er wird nur EINMAL angezeigt!',
+    'reccode.copy':'📋 Code kopieren',
+    'reccode.warn':'⚠ Ohne diesen Code sind deine Fotos bei Passwortverlust unwiederbringlich verloren. Es gibt keinen anderen Weg zur Wiederherstellung.',
+    'reccode.confirm':'Ich habe den Recovery-Code sicher gespeichert',
+    'reccode.continue':'Weiter zur App',
+    'reccode.copied':'Code kopiert',
+    'recover.title':'Konto wiederherstellen',
+    'recover.desc':'Mit deinem Recovery-Code kannst du ein neues Passwort setzen und behältst Zugriff auf deine Fotos.',
+    'recover.submit':'Wiederherstellen',
+    'recover.success':'Konto wiederhergestellt – neuer Recovery-Code wird angezeigt',
+    'photo.pending':'Wartet auf Freigabe durch Besitzer',
+    'btn.refresh':'↺ Aktualisieren',
+    'stats.version':'App-Version',
+    'cover.set_btn':'🖼 Als Cover','cover.set':'Album-Cover gesetzt','cover.removed':'Album-Cover entfernt',
+    'nav.observers':'Beobachter',
+    'obs.title':'Meine Beobachter','obs.new':'+ Neuer Beobachter',
+    'obs.desc':'Beobachter können ausgewählte Alben von dir ansehen – kein Upload, kein Download, kein Teilen.',
+    'obs.col.albums':'Freigegebene Alben','obs.new_title':'Neuen Beobachter anlegen',
+    'obs.new_info':'Der Beobachter muss beim ersten Login ein eigenes Passwort setzen. Danach kann er die von dir freigegebenen Alben ansehen.',
+    'obs.albums_title':'Alben freigeben','obs.albums_desc':'darf folgende deiner Alben ansehen:',
+    'obs.created':'Beobachter angelegt','obs.deleted':'Beobachter gelöscht',
+    'obs.confirm_delete':'Beobachter wirklich löschen?',
+    'obs.albums_count':(n)=>`${n} Album${n!==1?'en':''}`,
+    'obs.pending_note':(n)=>n>0?` (${n} Foto(s) werden umgeschlüsselt)`:'',
+    'pin.unlock_title':'Verstecktes Album entsperren','pin.unlock_btn':'Entsperren',
+    'pin.wrong':'Falscher PIN','pin.unlocked':'Album entsperrt',
+    'hide.title':'Album verstecken','hide.unhide_title':'Album sichtbar machen',
+    'hide.desc':'Vergib einen 4-stelligen PIN. Das Album wird mit geschlossenem Auge dargestellt und erst nach PIN-Eingabe angezeigt.',
+    'hide.info':'ℹ Der PIN ist ein Sichtschutz, kein kryptografischer Schutz. Die Fotos bleiben wie gewohnt verschlüsselt. Unteralben werden mit versteckt.',
+    'hide.unhide_desc':'Zum Sichtbarmachen bitte dein Account-Passwort eingeben.',
+    'hide.hidden':'Album versteckt','hide.unhidden':'Album ist wieder sichtbar',
+    'hide.btn':'🙈 Verstecken','hide.unhide_btn':'👁 Sichtbar machen',
+    'hide.pin_invalid':'PIN muss genau 4 Ziffern haben',
+    'tile.hidden_album':'Verstecktes Album','tile.subalbums':(n)=>`${n} Unteralbum${n!==1?'en':''}`,
+    'export.btn':'📦 Alle meine Fotos exportieren (ZIP)','export.hint':'Lädt alle deine Fotos entschlüsselt als ZIP-Archiv herunter – sortiert nach Alben.',
+    'home.title':'⌂ Alben','album.locked_toast':'Album ist gesperrt – PIN erforderlich',
+    'relogin.required':'Sitzungsschlüssel fehlt – bitte neu anmelden',
+  },
+  en: {
+    'login.tagline':'Encrypted Photo Management','login.username':'Username',
+    'login.password':'Password','login.submit':'Sign In',
+    'login.err.invalid':'Invalid credentials','login.err.connection':'Connection error',
+    'nav.albums':'Albums','nav.users':'Users','nav.account':'Account',
+    'nav.logout':'Sign Out','nav.loggedinas':'Signed in as',
+    'albums.title':'Photo Albums','albums.new_root':'+ New Album',
+    'albums.sidebar_title':'Albums','albums.select_hint':'Select an album from the sidebar',
+    'albums.new_sub':'+ Sub-Album','albums.rename':'Rename','albums.delete':'Delete',
+    'albums.empty':'This album is empty',
+    'albums.no_albums':'No albums yet. Create your first one!',
+    'albums.confirm_delete':'Really delete this album including all photos and sub-albums?',
+    'albums.deleted':'Album deleted','albums.created':'Album created','albums.updated':'Album updated',
+    'albums.photos_count':(n)=>`${n} photo${n!==1?'s':''}`,
+    'album.name':'Album name','album.name_placeholder':'My Photos…',
+    'album.description':'Description (optional)','album.desc_placeholder':'Short description…',
+    'album.new_title':'Create New Album','album.new_sub_title':(p)=>`Sub-album in "${p}"`,
+    'album.edit_title':(n)=>`Edit album "${n}"`,
+    'upload.btn':'📤 Upload',
+    'upload.encrypting':(n)=>`🔒 Uploading ${n} file(s)…`,
+    'upload.done':(ok,err)=>`✅ ${ok} photo(s) saved${err?` · ⚠ ${err} failed`:''}`,
+    'upload.fail':'Upload failed',
+    'upload.toast':(n)=>`${n} photo(s) uploaded`,
+    'selection.none':'No selection',
+    'selection.count':(n)=>`${n} photo${n!==1?'s':''} selected`,
+    'selection.select_all':'Select all','selection.deselect_all':'Deselect all',
+    'selection.download':'⬇ Download','selection.delete':'🗑 Delete',
+    'selection.confirm_delete':(n)=>`Really delete ${n} photo${n!==1?'s':''}?`,
+    'selection.deleted':(n)=>`${n} photo${n!==1?'s':''} deleted`,
+    'selection.share':'🔗 Share','selection.unshare':'🔗 Unshare',
+    'selection.shared':(n)=>`${n} photo${n!==1?'s':''} shared`,
+    'selection.unshared':(n)=>`${n} photo${n!==1?'s':''} unshared`,
+    'photo.shared_badge':'Shared','shared.album_name':'📢 Shared Photos',
+    'users.title':'User Management','users.new':'+ New User',
+    'users.col.username':'Username','users.col.role':'Role','users.col.created':'Created',
+    'users.col.album_access':'Album Access','users.col.actions':'Actions',
+    'users.all_albums':'All Albums','users.album_rights':'🗂 Album Rights',
+    'users.reset_pw':'🔑 PW','users.delete':'Delete','users.me':'You',
+    'users.deleted':'User deleted','users.created':'User created',
+    'users.confirm_delete':'Really delete this user?',
+    'users.albums_count':(n)=>`${n} album${n!==1?'s':''}`,
+    'account.title':'My Account','account.changepw':'Change Password',
+    'account.current_pw':'Current Password','account.new_pw':'New Password',
+    'account.confirm_pw':'Repeat Password','account.pw_min':'At least 6 characters',
+    'account.changepw_btn':'Change Password','account.pw_changed':'Password changed',
+    'account.pw_mismatch':'Passwords do not match','account.pw_short':'Min. 6 characters',
+    'modal.newuser.title':'New User','modal.newuser.role':'Role',
+    'modal.albumperm.title':'Manage Album Access',
+    'modal.albumperm.desc':'Albums that','modal.albumperm.desc2':'may view:',
+    'modal.resetpw.title':'Reset Password','modal.resetpw.desc':'New password for',
+    'role.user':'User','role.admin':'Administrator',
+    'btn.cancel':'Cancel','btn.create':'Create','btn.save':'Save','btn.set':'Set',
+    'perm.saved':'Permissions saved','perm.save_err':'Error saving','pw.set':'Password set',
+    'err.required':'Username and password are required',
+    'loading':'Loading…','error':'Failed to load',
+    'nav.stats':'Statistics',
+    'stats.title':'Statistics & Analytics',
+    'stats.overview':'Overview',
+    'stats.top_photos':'Most Viewed Photos',
+    'stats.top_albums':'Most Viewed Albums',
+    'stats.top_viewers':'Most Active Users (Views)',
+    'stats.top_uploaders':'Most Uploads',
+    'stats.timeline':'Views Last 30 Days',
+    'stats.photo':'Photo','stats.album':'Album','stats.owner':'Owner',
+    'stats.views':'Views','stats.unique':'Unique','stats.downloads':'Downloads',
+    'stats.photos':'Photos','stats.storage':'Storage','stats.shared':'Shared',
+    'stats.total_photos':'Total Photos','stats.total_albums':'Albums',
+    'stats.total_users':'Users','stats.total_views':'Total Views',
+    'stats.total_downloads':'Downloads','stats.storage_mb':'Storage (MB)',
+    'stats.no_data':'No data available yet',
+    'login.forgot':'Forgot password? Restore with recovery code',
+    'setup.title':'Set Your New Password',
+    'setup.desc':'On first login you must choose your own password. It also serves as the encryption key for your photos.',
+    'setup.existing_warn':'⚠ Your password was reset by the admin. Enter your recovery code to keep access to your existing photos. Without it, your old photos remain permanently encrypted!',
+    'setup.recovery_label':'Recovery code (optional)',
+    'setup.new_pw':'New password',
+    'setup.pw_min':'At least 8 characters',
+    'setup.info':'🔒 Your password encrypts your photos. Nobody – not even the admin – can decrypt them without your password or recovery code.',
+    'setup.submit':'Set Password',
+    'setup.pw_mismatch':'Passwords do not match',
+    'setup.pw_short':'Password min 8 characters',
+    'reccode.title':'Your Recovery Code',
+    'reccode.desc':'Store this code safely (password manager, printout). It is shown only ONCE!',
+    'reccode.copy':'📋 Copy code',
+    'reccode.warn':'⚠ Without this code, your photos are irrecoverably lost if you forget your password. There is no other way to restore access.',
+    'reccode.confirm':'I have safely stored the recovery code',
+    'reccode.continue':'Continue to app',
+    'reccode.copied':'Code copied',
+    'recover.title':'Restore Account',
+    'recover.desc':'With your recovery code you can set a new password and keep access to your photos.',
+    'recover.submit':'Restore',
+    'recover.success':'Account restored – new recovery code will be shown',
+    'photo.pending':'Awaiting re-encryption by owner',
+    'btn.refresh':'↺ Refresh',
+    'stats.version':'App Version',
+    'cover.set_btn':'🖼 Set as cover','cover.set':'Album cover set','cover.removed':'Album cover removed',
+    'nav.observers':'Observers',
+    'obs.title':'My Observers','obs.new':'+ New Observer',
+    'obs.desc':'Observers can view selected albums of yours – no upload, no download, no sharing.',
+    'obs.col.albums':'Granted Albums','obs.new_title':'Create New Observer',
+    'obs.new_info':'The observer must set their own password at first login. Afterwards they can view the albums you grant.',
+    'obs.albums_title':'Grant Albums','obs.albums_desc':'may view these albums of yours:',
+    'obs.created':'Observer created','obs.deleted':'Observer deleted',
+    'obs.confirm_delete':'Really delete this observer?',
+    'obs.albums_count':(n)=>`${n} album${n!==1?'s':''}`,
+    'obs.pending_note':(n)=>n>0?` (${n} photo(s) being re-encrypted)`:'',
+    'pin.unlock_title':'Unlock Hidden Album','pin.unlock_btn':'Unlock',
+    'pin.wrong':'Wrong PIN','pin.unlocked':'Album unlocked',
+    'hide.title':'Hide Album','hide.unhide_title':'Unhide Album',
+    'hide.desc':'Choose a 4-digit PIN. The album will be shown with a closed eye and only revealed after entering the PIN.',
+    'hide.info':'ℹ The PIN is a visibility lock, not cryptographic protection. Photos remain encrypted as usual. Sub-albums are hidden too.',
+    'hide.unhide_desc':'Enter your account password to make the album visible again.',
+    'hide.hidden':'Album hidden','hide.unhidden':'Album is visible again',
+    'hide.btn':'🙈 Hide','hide.unhide_btn':'👁 Unhide',
+    'hide.pin_invalid':'PIN must be exactly 4 digits',
+    'tile.hidden_album':'Hidden album','tile.subalbums':(n)=>`${n} sub-album${n!==1?'s':''}`,
+    'export.btn':'📦 Export all my photos (ZIP)','export.hint':'Downloads all your photos decrypted as a ZIP archive – organized by album.',
+    'home.title':'⌂ Albums','album.locked_toast':'Album is locked – PIN required',
+    'relogin.required':'Session key missing – please log in again',
+  }
+};
+
+// i18n
+let lang = localStorage.getItem('vermeer_lang')||(navigator.language.startsWith('de')?'de':'en');
+function t(key,...a){const v=(T[lang]??T.de)[key]??T.de[key]??key;return typeof v==='function'?v(...a):v;}
+function setLang(l){lang=l;localStorage.setItem('vermeer_lang',l);applyTranslations();if(me&&currentAlbumId)loadAlbumContent(currentAlbumId);}
+function applyTranslations(){
+  document.documentElement.lang=lang;
+  ['de','en'].forEach(l=>['lang-login-','lang-app-'].forEach(p=>{const el=document.getElementById(p+l);if(el)el.classList.toggle('active',l===lang);}));
+  document.querySelectorAll('[data-i18n]').forEach(el=>{const v=t(el.getAttribute('data-i18n'));if(typeof v==='string'&&el.children.length===0)el.textContent=v;});
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{el.placeholder=t(el.getAttribute('data-i18n-ph'));});
+  document.querySelectorAll('option[data-i18n]').forEach(el=>{el.textContent=t(el.getAttribute('data-i18n'));});
+  if(me)updateLoggedInLabel();
+}
+function updateLoggedInLabel(){const el=document.getElementById('logged-in-label');if(el)el.innerHTML=`<span style="color:var(--muted)">${t('nav.loggedinas')} <strong style="color:var(--accent)">${esc(me.username)}</strong></span>`;}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let me=null,allAlbums=[],allUsers=[],currentAlbumId=null,currentPhotos=[];
+let expandedAlbums=new Set(),selectedPhotos=new Set();
+let lbThumbCache={};  // persistent thumb URL cache per photo id
+let currentAlbumCanManage=false;
+let albumPermTargetId=null,resetTargetId=null;
+let albumModalMode=null,albumModalParentId=null,albumModalEditId=null;
+// Lightbox state
+let lbPhotos=[],lbIndex=0,lbThumbUrls={};
+
+// ── AUTH ────────────────────────────────────────────────────────────
+let pendingBoot=false; // wait for recovery code confirmation before booting
+
+async function doLogin(){
+  const username=document.getElementById('l-user').value.trim();
+  const password=document.getElementById('l-pass').value;
+  const errEl=document.getElementById('login-err');errEl.style.display='none';
+  try{
+    const r=await api('POST','/api/login',{username,password});
+    const data=await r.json();
+    if(!r.ok){errEl.textContent=data.error||t('login.err.invalid');errEl.style.display='block';return;}
+    me=data;
+
+    // Case A: forced first-login setup
+    if(data.mustChangePassword){
+      document.getElementById('setup-existing-warn').style.display=data.hasExistingData?'block':'none';
+      document.getElementById('setup-recovery-group').style.display=data.hasExistingData?'block':'none';
+      ['setup-recovery','setup-pw','setup-pw2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+      document.getElementById('modal-setup-pw').classList.add('open');
+      return;
+    }
+    // Case B: legacy user auto-setup → recovery code delivered once
+    if(data.recoveryCode){
+      showRecoveryCode(data.recoveryCode);
+      pendingBoot=true;
+      return;
+    }
+    // Case C: normal login
+    bootApp();
+  }catch{errEl.textContent=t('login.err.connection');errEl.style.display='block';}
+}
+
+async function doSetupPassword(){
+  const pw =document.getElementById('setup-pw').value;
+  const pw2=document.getElementById('setup-pw2').value;
+  const recoveryCode=document.getElementById('setup-recovery').value.trim();
+  if(pw!==pw2){toast(t('setup.pw_mismatch'),'error');return;}
+  if(pw.length<8){toast(t('setup.pw_short'),'error');return;}
+  const r=await api('POST','/api/me/setup-password',{newPassword:pw,recoveryCode:recoveryCode||undefined});
+  const data=await r.json();
+  if(!r.ok){toast(data.error,'error');return;}
+  closeModal('modal-setup-pw');
+  showRecoveryCode(data.recoveryCode);
+  pendingBoot=true;
+}
+
+function showRecoveryCode(code){
+  document.getElementById('recovery-code-display').textContent=code;
+  document.getElementById('reccode-confirm').checked=false;
+  document.getElementById('reccode-continue').disabled=true;
+  document.getElementById('modal-recovery-code').classList.add('open');
+}
+
+function copyRecoveryCode(){
+  const code=document.getElementById('recovery-code-display').textContent;
+  navigator.clipboard?.writeText(code).then(()=>toast(t('reccode.copied'),'success')).catch(()=>{});
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const cb=document.getElementById('reccode-confirm');
+  if(cb)cb.addEventListener('change',()=>{document.getElementById('reccode-continue').disabled=!cb.checked;});
+});
+
+function confirmRecoveryCode(){
+  closeModal('modal-recovery-code');
+  if(pendingBoot){pendingBoot=false;bootApp();}
+}
+
+function openRecoverModal(){
+  ['rec-user','rec-code','rec-pw'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('rec-err').style.display='none';
+  document.getElementById('modal-recover').classList.add('open');
+}
+
+async function doRecover(){
+  const username=document.getElementById('rec-user').value.trim();
+  const recoveryCode=document.getElementById('rec-code').value.trim();
+  const newPassword=document.getElementById('rec-pw').value;
+  const errEl=document.getElementById('rec-err');errEl.style.display='none';
+  if(newPassword.length<8){errEl.textContent=t('setup.pw_short');errEl.style.display='block';return;}
+  const r=await api('POST','/api/recover',{username,recoveryCode,newPassword});
+  const data=await r.json();
+  if(!r.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+  closeModal('modal-recover');
+  toast(t('recover.success'),'success');
+  pendingBoot=false; // must log in with new password afterwards
+  showRecoveryCode(data.recoveryCode);
+}
+document.getElementById('l-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+async function doLogout(){await fetch('/api/logout',{method:'POST'});location.reload();}
+async function checkSession(){
+  try{
+    const r=await fetch('/api/me');
+    if(!r.ok)return;
+    me=await r.json();
+    if(me.mustChangePassword){
+      document.getElementById('setup-existing-warn').style.display='none';
+      document.getElementById('setup-recovery-group').style.display='none';
+      document.getElementById('modal-setup-pw').classList.add('open');
+      return;
+    }
+    if(!me.hasDEK){
+      // Session valid but key lost (server restart) → force re-login
+      await fetch('/api/logout',{method:'POST'});
+      return;
+    }
+    bootApp();
+  }catch{}
+}
+function bootApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  if(me.type==='admin'){
+    document.getElementById('admin-pill').style.display='inline-block';
+    document.getElementById('nav-users').style.display='inline-block';
+    document.getElementById('nav-stats').style.display='inline-block';
+  }
+  if(me.type==='user'||me.type==='admin'){
+    document.getElementById('nav-observers').style.display='inline-block';
+  }
+  if(me.type==='observer'){
+    const ec=document.getElementById('export-card');if(ec)ec.style.display='none';
+  }
+  applyTranslations();loadAlbums();
+}
+
+// ── NAVIGATION ──────────────────────────────────────────────────────
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  if(name==='users')loadUsers();
+  if(name==='stats')loadStats();
+  if(name==='observers')loadObservers();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// STATISTICS
+// ═══════════════════════════════════════════════════════════════════
+async function loadStats() {
+  const wrap = document.getElementById('stats-content');
+  wrap.innerHTML = `<div class="empty-state"><div class="e-icon">⏳</div><p>${t('loading')}</p></div>`;
+  try {
+    const r = await fetch('/api/stats');
+    if (!r.ok) { wrap.innerHTML = `<div class="empty-state"><p>${t('error')}</p></div>`; return; }
+    const s = await r.json();
+    renderStats(s, wrap);
+  } catch { wrap.innerHTML = `<div class="empty-state"><p>${t('error')}</p></div>`; }
+}
+
+function renderStats(s, wrap) {
+  const o = s.overview;
+  wrap.innerHTML = '';
+
+  // ── Overview cards ──
+  const overviewSection = document.createElement('div');
+  overviewSection.className = 'stats-section';
+  overviewSection.innerHTML = `<div class="stats-section-header">📊 ${t('stats.overview')}</div>`;
+  const grid = document.createElement('div');
+  grid.className = 'stats-grid';
+  grid.style.padding = '16px';
+  [
+    { v: o.totalPhotos,    l: t('stats.total_photos'),    icon: '🖼' },
+    { v: o.totalAlbums,    l: t('stats.total_albums'),     icon: '📁' },
+    { v: o.totalUsers,     l: t('stats.total_users'),      icon: '👤' },
+    { v: o.totalViews,     l: t('stats.total_views'),      icon: '👁' },
+    { v: o.totalDownloads, l: t('stats.total_downloads'),  icon: '⬇' },
+    { v: o.sharedPhotos,   l: t('stats.shared'),           icon: '🔗' },
+    { v: o.totalStorageMB + ' MB', l: t('stats.storage_mb'), icon: '💾' },
+    { v: o.appVersion || '–',       l: t('stats.version'),    icon: '🏷' },
+  ].forEach(({ v, l, icon }) => {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.innerHTML = `<div class="stat-value">${icon} ${v}</div><div class="stat-label">${l}</div>`;
+    grid.appendChild(card);
+  });
+  overviewSection.appendChild(grid);
+  wrap.appendChild(overviewSection);
+
+  // ── Timeline ──
+  if (s.viewsTimeline && s.viewsTimeline.length > 0) {
+    const tl = document.createElement('div');
+    tl.className = 'stats-section';
+    tl.innerHTML = `<div class="stats-section-header">📈 ${t('stats.timeline')}</div>`;
+    const chart = document.createElement('div');
+    chart.className = 'timeline-chart';
+    const maxViews = Math.max(...s.viewsTimeline.map(e => e.count), 1);
+    s.viewsTimeline.forEach(({ date, count }) => {
+      const barWrap = document.createElement('div');
+      barWrap.className = 'tl-bar-wrap';
+      barWrap.title = `${date}: ${count} ${t('stats.views')}`;
+      const bar = document.createElement('div');
+      bar.className = 'tl-bar';
+      bar.style.height = Math.max(2, (count / maxViews) * 80) + 'px';
+      const lbl = document.createElement('div');
+      lbl.className = 'tl-label';
+      lbl.textContent = date.slice(5); // MM-DD
+      barWrap.appendChild(bar);
+      barWrap.appendChild(lbl);
+      chart.appendChild(barWrap);
+    });
+    tl.appendChild(chart);
+    wrap.appendChild(tl);
+  }
+
+  // ── Top Photos ──
+  renderStatsTable(wrap, `🖼 ${t('stats.top_photos')}`, s.topPhotos,
+    [t('stats.photo'), t('stats.album'), t('stats.owner'), t('stats.views'), t('stats.unique'), t('stats.downloads'), ''],
+    (p, i, maxV) => `
+      <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
+      <td>${esc(p.name)}${p.shared?` <span class="shared-dot"></span>`:''}  </td>
+      <td style="color:var(--muted);font-size:12px">${esc(p.albumName)}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(p.ownerName)}</td>
+      <td><strong>${p.views}</strong></td>
+      <td style="color:var(--muted)">${p.uniqueViewers}</td>
+      <td style="color:var(--muted)">${p.downloads}</td>
+      <td style="width:100px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(p.views/maxV*100)}%"></div></div></td>`,
+    p => p.views
+  );
+
+  // ── Top Albums ──
+  renderStatsTable(wrap, `📁 ${t('stats.top_albums')}`, s.topAlbums,
+    [t('stats.album'), t('stats.owner'), t('stats.photos'), t('stats.views'), ''],
+    (a, i, maxV) => `
+      <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
+      <td>${esc(a.name)}</td>
+      <td style="color:var(--muted);font-size:12px">${esc(a.ownerName)}</td>
+      <td style="color:var(--muted)">${a.photoCount}</td>
+      <td><strong>${a.views}</strong></td>
+      <td style="width:100px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(a.views/maxV*100)}%"></div></div></td>`,
+    a => a.views
+  );
+
+  // ── Top Viewers ──
+  renderStatsTable(wrap, `👁 ${t('stats.top_viewers')}`, s.topViewers,
+    ['Benutzer / User', t('stats.views'), ''],
+    (u, i, maxV) => `
+      <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
+      <td>${esc(u.username)}</td>
+      <td><strong>${u.views}</strong></td>
+      <td style="width:120px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(u.views/maxV*100)}%"></div></div></td>`,
+    u => u.views
+  );
+
+  // ── Top Uploaders ──
+  renderStatsTable(wrap, `📤 ${t('stats.top_uploaders')}`, s.topUploaders,
+    ['Benutzer / User', t('stats.photos'), t('stats.storage_mb'), ''],
+    (u, i, maxV) => `
+      <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
+      <td>${esc(u.username)}</td>
+      <td><strong>${u.photos}</strong></td>
+      <td style="color:var(--muted)">${u.sizeMB} MB</td>
+      <td style="width:100px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(u.photos/maxV*100)}%"></div></div></td>`,
+    u => u.photos
+  );
+}
+
+function renderStatsTable(wrap, title, rows, headers, rowFn, valueFn) {
+  const sec = document.createElement('div');
+  sec.className = 'stats-section';
+  if (!rows || rows.length === 0) {
+    sec.innerHTML = `<div class="stats-section-header">${title}</div>
+      <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">${t('stats.no_data')}</div>`;
+    wrap.appendChild(sec); return;
+  }
+  const maxV = Math.max(...rows.map(valueFn), 1);
+  sec.innerHTML = `<div class="stats-section-header">${title}</div>
+    <table class="stats-table">
+      <thead><tr><th>#</th>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((row, i) => `<tr>${rowFn(row, i, maxV)}</tr>`).join('')}</tbody>
+    </table>`;
+  wrap.appendChild(sec);
+}
+
+// ═══ PIN / HIDE / OBSERVERS / EXPORT (v1.0.0) ═══════════════════════
+let pinAlbum=null, hideAlbum=null, obsAlbumsTargetId=null, allObservers=[];
+
+function openPinModal(album){
+  pinAlbum=album;
+  document.getElementById('pin-album-name').textContent=album.name;
+  document.getElementById('pin-input').value='';
+  document.getElementById('pin-err').style.display='none';
+  document.getElementById('modal-pin').classList.add('open');
+  setTimeout(()=>document.getElementById('pin-input').focus(),60);
+}
+async function doUnlockAlbum(){
+  if(!pinAlbum)return;
+  const pin=document.getElementById('pin-input').value;
+  const errEl=document.getElementById('pin-err');errEl.style.display='none';
+  const r=await api('POST',`/api/albums/${pinAlbum.id}/unlock`,{pin});
+  const data=await r.json();
+  if(!r.ok){errEl.textContent=data.error===('Wrong PIN')?t('pin.wrong'):data.error;errEl.style.display='block';return;}
+  closeModal('modal-pin');
+  toast(t('pin.unlocked'),'success');
+  const id=pinAlbum.id;pinAlbum=null;
+  await loadAlbums();
+  selectAlbum(id);
+}
+function openHideModal(album){
+  hideAlbum=album;
+  const isHidden=album.hidden;
+  document.getElementById('hide-modal-title').textContent=isHidden?t('hide.unhide_title'):t('hide.title');
+  document.getElementById('hide-set-group').style.display=isHidden?'none':'block';
+  document.getElementById('hide-unset-group').style.display=isHidden?'block':'none';
+  document.getElementById('hide-confirm-btn').textContent=isHidden?t('hide.unhide_btn'):t('hide.btn');
+  document.getElementById('hide-pin').value='';document.getElementById('hide-account-pw').value='';
+  document.getElementById('hide-err').style.display='none';
+  document.getElementById('modal-hide').classList.add('open');
+}
+async function doHideAlbum(){
+  if(!hideAlbum)return;
+  const errEl=document.getElementById('hide-err');errEl.style.display='none';
+  let body;
+  if(hideAlbum.hidden){
+    body={pin:null,password:document.getElementById('hide-account-pw').value};
+  } else {
+    const pin=document.getElementById('hide-pin').value;
+    if(!/^\d{4}$/.test(pin)){errEl.textContent=t('hide.pin_invalid');errEl.style.display='block';return;}
+    body={pin};
+  }
+  const r=await api('PUT',`/api/albums/${hideAlbum.id}/hide`,body);
+  const data=await r.json();
+  if(!r.ok){errEl.textContent=data.error;errEl.style.display='block';return;}
+  closeModal('modal-hide');
+  toast(hideAlbum.hidden?t('hide.unhidden'):t('hide.hidden'),'success');
+  hideAlbum=null;
+  loadAlbums();
+}
+
+// ── Observers ──
+function obsNameById(id){const o=allObservers.find(x=>x.id===id);return o?o.username:'';}
+document.getElementById('observers-tbody').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-act]');if(!btn)return;
+  const id=btn.dataset.id;
+  if(btn.dataset.act==='obsalbum')openObsAlbumsModal(id,obsNameById(id));
+  else if(btn.dataset.act==='obsreset')openResetObserverPw(id);
+  else if(btn.dataset.act==='obsdel')deleteObserver(id);
+});
+async function loadObservers(){
+  const r=await fetch('/api/observers');
+  if(!r.ok)return;
+  allObservers=await r.json();
+  document.getElementById('observers-tbody').innerHTML=allObservers.map(o=>`
+    <tr>
+      <td><strong>👁 ${esc(o.username)}</strong>${o.mustChangePassword?' <span style="color:var(--muted);font-size:11px">(Setup ausstehend)</span>':''}</td>
+      <td>${fmtDate(o.createdAt)}</td>
+      <td><span style="font-size:12px;color:var(--muted)">${t('obs.albums_count',(o.canViewAlbums||[]).length)}</span>
+        <button class="btn btn-ghost btn-xs" style="margin-left:8px" data-act="obsalbum" data-id="${o.id}">${t('users.album_rights')}</button></td>
+      <td><div class="td-actions">
+        <button class="btn btn-ghost btn-sm" data-act="obsreset" data-id="${o.id}">${t('users.reset_pw')}</button>
+        <button class="btn btn-danger btn-sm" data-act="obsdel" data-id="${o.id}">${t('users.delete')}</button>
+      </div></td>
+    </tr>`).join('')||`<tr><td colspan="4" style="color:var(--muted);text-align:center">–</td></tr>`;
+}
+function openNewObserverModal(){['no-name','no-pass'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-new-observer').classList.add('open');}
+async function createObserver(){
+  const username=document.getElementById('no-name').value.trim();
+  const password=document.getElementById('no-pass').value;
+  if(!username||!password){toast(t('err.required'),'error');return;}
+  const r=await api('POST','/api/observers',{username,password});
+  const data=await r.json();
+  if(r.ok){toast(t('obs.created'),'success');closeModal('modal-new-observer');loadObservers();}
+  else toast(data.error,'error');
+}
+async function deleteObserver(id){
+  if(!confirm(t('obs.confirm_delete')))return;
+  const r=await fetch(`/api/observers/${id}`,{method:'DELETE'});
+  if(r.ok){toast(t('obs.deleted'),'success');loadObservers();}else toast((await r.json()).error,'error');
+}
+async function openResetObserverPw(id){
+  const pw=prompt(t('modal.resetpw.title')+' – '+t('account.pw_min'));
+  if(!pw)return;
+  const r=await api('PUT',`/api/observers/${id}/password`,{password:pw});
+  if(r.ok)toast(t('pw.set'),'success');else toast((await r.json()).error,'error');
+}
+function openObsAlbumsModal(obsId,name){
+  obsAlbumsTargetId=obsId;
+  document.getElementById('obsalbums-name').textContent=name;
+  const obs=allObservers.find(o=>o.id===obsId);
+  const current=obs?.canViewAlbums||[];
+  const mine=allAlbums.filter(a=>a.ownerId===me.id);
+  document.getElementById('obs-album-tree').innerHTML=mine.map(a=>{
+    const checked=current.includes(a.id)?'checked':'';
+    return `<label class="perm-album-item"><input type="checkbox" value="${a.id}" ${checked}><span>${a.effectiveHidden?'🙈 ':''}${esc(a.name)}</span></label>`;
+  }).join('')||`<div style="padding:12px;color:var(--muted);font-size:13px">${t('albums.no_albums')}</div>`;
+  document.getElementById('modal-obs-albums').classList.add('open');
+}
+async function saveObserverAlbums(){
+  const checked=[...document.querySelectorAll('#obs-album-tree input:checked')].map(x=>x.value);
+  const r=await api('PUT',`/api/observers/${obsAlbumsTargetId}/albums`,{canViewAlbums:checked});
+  const data=await r.json();
+  if(r.ok){toast(t('perm.saved')+t('obs.pending_note',data.pendingCount||0),'success');closeModal('modal-obs-albums');loadObservers();}
+  else toast(t('perm.save_err'),'error');
+}
+
+// ── Export ──
+function doExport(){window.location='/api/export';}
+
+// ── Swipe-Back (Mobil): von linker Kante nach rechts wischen = Ebene hoch ──
+(function(){
+  let sx=0,sy=0,st=0,edge=false;
+  document.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1)return;
+    sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();
+    edge=sx<24;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(!edge||e.changedTouches.length!==1)return;
+    if(document.getElementById('lightbox').classList.contains('open'))return;
+    const dx=e.changedTouches[0].clientX-sx, dy=Math.abs(e.changedTouches[0].clientY-sy);
+    if(Date.now()-st<450&&dx>70&&dx>dy*2&&currentAlbumId){
+      const cur=allAlbums.find(a=>a.id===currentAlbumId);
+      if(cur&&cur.parentId)selectAlbum(cur.parentId);else goHome();
+    }
+  },{passive:true});
+})();
+
+// ═══════════════════════════════════════════════════════════════════
+// ALBUM TREE
+// ═══════════════════════════════════════════════════════════════════
+async function loadAlbums(){
+  const r=await fetch('/api/albums');allAlbums=await r.json();
+  if(currentAlbumId && !allAlbums.find(a=>a.id===currentAlbumId)) currentAlbumId=null;
+  loadAlbumContent(currentAlbumId);
+}
+function albumChildren(pid){return allAlbums.filter(a=>a.parentId===pid);}
+function selectAlbum(id){
+  const a=allAlbums.find(x=>x.id===id);
+  if(a&&a.locked){openPinModal(a);return;}
+  currentAlbumId=id;selectedPhotos.clear();loadAlbumContent(id);
+}
+function goHome(){currentAlbumId=null;selectedPhotos.clear();loadAlbumContent(null);}
+
+// ═══════════════════════════════════════════════════════════════════
+// ALBUM CONTENT
+// ═══════════════════════════════════════════════════════════════════
+async function loadAlbumContent(albumId){
+  const content=document.getElementById('album-content');
+  content.innerHTML='';
+  const isHome=!albumId;
+  const album=isHome?null:allAlbums.find(a=>a.id===albumId);
+  if(!isHome&&!album){currentAlbumId=null;return loadAlbumContent(null);}
+  currentAlbumCanManage=!isHome&&!!album.canManage;
+  selectedPhotos.clear();
+  const isObserver=me&&me.type==='observer';
+  const children=allAlbums.filter(a=>a.parentId===(isHome?null:albumId)&&a.id!==currentAlbumId);
+  const rootTiles=isHome?allAlbums.filter(a=>a.parentId===null):children;
+
+  // ── Toolbar mit Breadcrumb ──
+  const toolbar=document.createElement('div');toolbar.className='content-toolbar';
+  const bc=document.createElement('div');bc.className='breadcrumb';
+  const homeItem=document.createElement('span');
+  homeItem.className='breadcrumb-item'+(isHome?' current':'');
+  homeItem.textContent=t('home.title');
+  if(!isHome)homeItem.onclick=goHome;
+  bc.appendChild(homeItem);
+  if(!isHome){
+    buildBreadcrumb(albumId).forEach((cr)=>{
+      const sep=document.createElement('span');sep.className='breadcrumb-sep';sep.textContent='/';bc.appendChild(sep);
+      const item=document.createElement('span');
+      item.className='breadcrumb-item'+(cr.id===albumId?' current':'');
+      item.textContent=cr.name;
+      if(cr.id!==albumId)item.onclick=()=>selectAlbum(cr.id);
+      bc.appendChild(item);
+    });
+  }
+  toolbar.appendChild(bc);
+  const tacts=document.createElement('div');tacts.className='toolbar-actions';
+  if(!isObserver&&(isHome||album.canManage)&&(isHome?me.type!=='observer':true)){
+    const btnNew=document.createElement('button');btnNew.className='btn btn-ghost btn-sm';
+    btnNew.textContent=isHome?t('albums.new_root'):t('albums.new_sub');
+    btnNew.onclick=()=>openNewAlbumModal(isHome?null:albumId);
+    if(me.type!=='observer')tacts.appendChild(btnNew);
+  }
+  if(!isHome&&album.canUpload){
+    const btnUp=document.createElement('button');btnUp.className='btn btn-primary btn-sm';
+    btnUp.textContent=t('upload.btn');
+    btnUp.onclick=()=>document.getElementById('file-input').click();
+    tacts.appendChild(btnUp);
+  }
+  toolbar.appendChild(tacts);content.appendChild(toolbar);
+
+  // ── Selection bar (nicht für Beobachter / Shared) ──
+  if(!isHome&&!isObserver&&albumId!=='__shared__'){
+    const selBar=document.createElement('div');selBar.className='selection-bar';selBar.id='selection-bar';
+    selBar.innerHTML=`<span class="selection-count" id="sel-count"></span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleSelectAll()" id="btn-sel-all">${t('selection.select_all')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadSelected()" id="btn-dl" style="display:none">${t('selection.download')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="shareSelected(true)"  id="btn-share"    style="display:none">${t('selection.share')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="shareSelected(false)" id="btn-unshare"  style="display:none">${t('selection.unshare')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="setCoverSelected()" id="btn-cover" style="display:none">${t('cover.set_btn')}</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btn-del-sel" style="display:none">${t('selection.delete')}</button>`;
+    content.appendChild(selBar);
+  }
+
+  // ── Upload progress ──
+  const prog=document.createElement('div');prog.className='upload-progress';prog.id='upload-progress';
+  prog.innerHTML='<span id="upload-status"></span><div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>';
+  content.appendChild(prog);
+
+  // ── Album-Kacheln ──
+  if(rootTiles.length){
+    if(!isHome){const lbl=document.createElement('div');lbl.className='section-label';lbl.textContent=t('albums.sidebar_title');content.appendChild(lbl);}
+    const grid=document.createElement('div');grid.className='album-tile-grid';
+    rootTiles.forEach(a=>grid.appendChild(buildAlbumTile(a)));
+    content.appendChild(grid);
+  } else if(isHome){
+    content.innerHTML+=`<div class="empty-state"><div class="e-icon">📁</div><p>${t('albums.no_albums')}</p></div>`;
+  }
+
+  // ── Fotos ──
+  if(!isHome){
+    if(rootTiles.length){const lbl2=document.createElement('div');lbl2.className='section-label';lbl2.textContent='Fotos';content.appendChild(lbl2);}
+    const photosWrap=document.createElement('div');photosWrap.id='photos-wrap';
+    photosWrap.innerHTML=`<div class="empty-state"><div class="e-icon">⏳</div><p>${t('loading')}</p></div>`;
+    content.appendChild(photosWrap);
+    loadPhotos(albumId,photosWrap);
+  }
+}
+
+function buildAlbumTile(a){
+  const tile=document.createElement('div');
+  tile.className='album-tile'+(a.locked?' locked':'');
+  const subCount=allAlbums.filter(x=>x.parentId===a.id).length;
+
+  if(a.locked){
+    const big=document.createElement('div');big.className='at-bigicon';big.textContent='🙈';tile.appendChild(big);
+  } else if(a.coverPhotoId){
+    fetch(`/api/photos/${a.coverPhotoId}/thumb`).then(r=>r.ok?r.blob():null).then(b=>{
+      if(!b)return;
+      const img=document.createElement('img');img.className='at-cover';img.draggable=false;
+      img.src=URL.createObjectURL(b);
+      tile.insertBefore(img,tile.firstChild);
+    }).catch(()=>{});
+    const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':'📁';tile.appendChild(big);
+  } else {
+    const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':(a.hidden?'🙈':'📁');tile.appendChild(big);
+  }
+
+  const shade=document.createElement('div');shade.className='at-shade';tile.appendChild(shade);
+  const info=document.createElement('div');info.className='at-info';
+  const nm=document.createElement('div');nm.className='at-name';
+  nm.textContent=(a.effectiveHidden?'🙈 ':'')+a.name;
+  const meta=document.createElement('div');meta.className='at-meta';
+  if(a.locked){meta.textContent='🔒 PIN';}
+  else{
+    const parts=[t('albums.photos_count',a.photoCount)];
+    if(subCount)parts.push(t('tile.subalbums',subCount));
+    meta.textContent=parts.join(' · ');
+  }
+  info.appendChild(nm);info.appendChild(meta);tile.appendChild(info);
+
+  // Aktionen (nur canManage)
+  if(a.canManage){
+    const acts=document.createElement('div');acts.className='at-actions';
+    const mk=(icon,title,fn)=>{const b=document.createElement('button');b.className='at-act-btn';b.textContent=icon;b.title=title;
+      b.addEventListener('click',e=>{e.stopPropagation();fn();});return b;};
+    acts.appendChild(mk('✏️',t('albums.rename'),()=>openEditAlbumModal(a)));
+    acts.appendChild(mk(a.hidden?'👁':'🙈',a.hidden?t('hide.unhide_btn'):t('hide.btn'),()=>openHideModal(a)));
+    acts.appendChild(mk('🗑',t('albums.delete'),()=>deleteAlbum(a.id)));
+    tile.appendChild(acts);
+    // Long-Press (Mobil) zeigt Aktionen
+    let lpTimer=null;
+    tile.addEventListener('touchstart',()=>{lpTimer=setTimeout(()=>tile.classList.toggle('show-actions'),550);},{passive:true});
+    tile.addEventListener('touchend',()=>clearTimeout(lpTimer),{passive:true});
+    tile.addEventListener('touchmove',()=>clearTimeout(lpTimer),{passive:true});
+  }
+  tile.addEventListener('click',()=>selectAlbum(a.id));
+  return tile;
+}
+
+function buildBreadcrumb(albumId){
+  const crumbs=[];let cur=allAlbums.find(a=>a.id===albumId);
+  while(cur){crumbs.unshift({id:cur.id,name:cur.name});cur=cur.parentId?allAlbums.find(a=>a.id===cur.parentId):null;}
+  return crumbs;
+}
+
+async function loadPhotos(albumId,wrap){
+  try{
+    const r=await fetch(`/api/albums/${albumId}/photos`);
+    if(r.status===423){wrap.innerHTML=`<div class="empty-state"><div class="e-icon">🔒</div><p>${t('album.locked_toast')}</p></div>`;return;}
+    currentPhotos=await r.json();
+    if(!currentPhotos.length){wrap.innerHTML=`<div class="empty-state"><div class="e-icon">📷</div><p>${t('albums.empty')}</p></div>`;return;}
+    wrap.innerHTML='<div class="photo-grid" id="photo-grid"></div>';
+    const grid=document.getElementById('photo-grid');
+    const isSharedAlbum = albumId === '__shared__' || (me&&me.type==='observer');
+
+    currentPhotos.forEach((p,i)=>{
+      const isOwn=p.ownerId===me.id;
+      const card=document.createElement('div');
+      card.className='photo-card';
+      card.dataset.photoId=p.id;
+      card.dataset.idx=i;
+
+      // ── Image wrap ──
+      const imgWrap=document.createElement('div');
+      imgWrap.className='photo-img-wrap';
+
+      // Checkbox – only for non-shared albums (shared album = view only)
+      if(!isSharedAlbum){
+        const chk=document.createElement('div');
+        chk.className='photo-check';
+        chk.innerHTML='<span class="photo-check-icon">✓</span>';
+        chk.addEventListener('click',e=>toggleSelect(e,p.id));
+        imgWrap.appendChild(chk);
+      }
+
+      // Shared badge
+      if(p.shared){
+        const badge=document.createElement('span');
+        badge.className='shared-badge';
+        badge.textContent=t('photo.shared_badge');
+        imgWrap.appendChild(badge);
+      }
+
+      // Placeholder (replaced by thumb after load)
+      const ph=document.createElement('div');
+      ph.className='thumb-placeholder thumb-loading';
+      ph.id='tp-'+p.id;
+      ph.textContent='🖼';
+      imgWrap.appendChild(ph);
+
+      // Click on image wrap → lightbox (whole area, not just img)
+      imgWrap.addEventListener('click', e=>{
+        // Don't open lightbox if clicking the checkbox
+        if(e.target.closest('.photo-check')) return;
+        if(p.pending){toast(t('photo.pending'),'error');return;}
+        openLightbox(i);
+      });
+
+      card.appendChild(imgWrap);
+
+      // ── Info ──
+      const info=document.createElement('div');
+      info.className='photo-info';
+      const nameEl=document.createElement('div');
+      nameEl.className='photo-name';
+      nameEl.title=p.originalName;
+      nameEl.textContent=p.originalName;
+      const metaEl=document.createElement('div');
+      metaEl.className='photo-meta';
+      const dateSpan=document.createElement('span');
+      dateSpan.textContent=fmtDate(p.uploadedAt);
+      metaEl.appendChild(dateSpan);
+      if(!isOwn){
+        const ownerSpan=document.createElement('span');
+        ownerSpan.className='owner-tag';
+        ownerSpan.textContent=p.ownerName;
+        metaEl.appendChild(ownerSpan);
+      }
+      info.appendChild(nameEl);
+      info.appendChild(metaEl);
+      card.appendChild(info);
+
+      grid.appendChild(card);
+      loadThumb(p.id,i);
+    });
+  }catch(e){
+    console.error('loadPhotos error:',e);
+    wrap.innerHTML=`<div class="empty-state"><p>${t('error')}</p></div>`;
+  }
+}
+
+// ── SELECTION ───────────────────────────────────────────────────────
+function toggleSelect(e,photoId){
+  e.stopPropagation();
+  if(selectedPhotos.has(photoId))selectedPhotos.delete(photoId);
+  else selectedPhotos.add(photoId);
+  const card=document.querySelector(`[data-photo-id="${photoId}"]`);
+  if(card)card.classList.toggle('selected',selectedPhotos.has(photoId));
+  updateSelectionBar();
+}
+
+function toggleSelectAll(){
+  if(selectedPhotos.size===currentPhotos.length){
+    // deselect all
+    selectedPhotos.clear();
+    document.querySelectorAll('.photo-card').forEach(c=>c.classList.remove('selected'));
+  } else {
+    // select all
+    currentPhotos.forEach(p=>selectedPhotos.add(p.id));
+    document.querySelectorAll('.photo-card').forEach(c=>c.classList.add('selected'));
+  }
+  updateSelectionBar();
+}
+
+function updateSelectionBar(){
+  const bar=document.getElementById('selection-bar');
+  const count=document.getElementById('sel-count');
+  const btnAll=document.getElementById('btn-sel-all');
+  const btnDl=document.getElementById('btn-dl');
+  const btnDel=document.getElementById('btn-del-sel');
+  const btnShare=document.getElementById('btn-share');
+  const btnUnshare=document.getElementById('btn-unshare');
+  if(!bar)return;
+  const n=selectedPhotos.size;
+  bar.classList.toggle('visible',n>0);
+  if(count)count.textContent=n>0?t('selection.count',n):t('selection.none');
+  if(btnAll)btnAll.textContent=n===currentPhotos.length?t('selection.deselect_all'):t('selection.select_all');
+  const selPhotos=[...selectedPhotos].map(id=>currentPhotos.find(p=>p.id===id)).filter(Boolean);
+  // Download: only if all selected can be downloaded
+  const canDl=n>0&&selPhotos.every(p=>p.canDownload);
+  if(btnDl)btnDl.style.display=canDl?'':'none';
+  // Share/Unshare: only own photos or admin
+  const canShare=n>0&&selPhotos.every(p=>p.canShare);
+  const allShared=canShare&&selPhotos.every(p=>p.shared);
+  const noneShared=canShare&&selPhotos.every(p=>!p.shared);
+  if(btnShare)btnShare.style.display=(canShare&&!allShared)?'':'none';
+  if(btnUnshare)btnUnshare.style.display=(canShare&&!noneShared)?'':'none';
+  // Delete: only own or admin
+  const canDel=n>0&&selPhotos.every(p=>p.ownerId===me.id||me.role==='admin');
+  if(btnDel)btnDel.style.display=canDel?'':'none';
+  // Cover: exactly one photo selected + album manageable
+  const btnCover=document.getElementById('btn-cover');
+  if(btnCover)btnCover.style.display=(n===1&&currentAlbumCanManage)?'':'none';
+}
+
+async function downloadSelected(){
+  for(const id of selectedPhotos){
+    const p=currentPhotos.find(p=>p.id===id);if(!p||!p.canDownload)continue;
+    const a=document.createElement('a');a.href=`/api/photos/${id}/download`;a.download=p.originalName;
+    document.body.appendChild(a);a.click();a.remove();
+    await new Promise(r=>setTimeout(r,300)); // small delay between downloads
+  }
+}
+
+async function shareSelected(shared){
+  const ids=[...selectedPhotos];
+  const r=await api('POST','/api/photos/share',{photoIds:ids,shared});
+  if(r.ok){
+    const data=await r.json();
+    toast(shared?t('selection.shared',data.updated):t('selection.unshared',data.updated),'success');
+    selectedPhotos.clear();await loadAlbums();loadAlbumContent(currentAlbumId);
+  } else toast((await r.json()).error,'error');
+}
+
+async function setCoverSelected(){
+  if(selectedPhotos.size!==1||!currentAlbumId)return;
+  const photoId=[...selectedPhotos][0];
+  const r=await api('PUT',`/api/albums/${currentAlbumId}/cover`,{photoId});
+  if(r.ok){toast(t('cover.set'),'success');selectedPhotos.clear();await loadAlbums();}
+  else toast((await r.json()).error,'error');
+}
+
+async function deleteSelected(){
+  const n=selectedPhotos.size;
+  if(!confirm(t('selection.confirm_delete',n)))return;
+  let deleted=0;
+  for(const id of [...selectedPhotos]){
+    const r=await fetch(`/api/photos/${id}`,{method:'DELETE'});
+    if(r.ok)deleted++;
+  }
+  toast(t('selection.deleted',deleted),'success');
+  selectedPhotos.clear();
+  await loadAlbums();
+  loadAlbumContent(currentAlbumId);
+}
+
+// ── UPLOAD ──────────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('dragover',e=>{e.preventDefault();});
+
+async function handleFiles(files){
+  if(!files.length||!currentAlbumId)return;
+  const prog=document.getElementById('upload-progress');
+  const bar=document.getElementById('progress-bar');
+  const stat=document.getElementById('upload-status');
+  if(!prog)return;
+  prog.classList.add('visible');bar.style.width='15%';
+  stat.textContent=t('upload.encrypting',files.length);
+  const form=new FormData();
+  for(const f of files)form.append('photos',f);
+  form.append('albumId',currentAlbumId);
+  try{
+    bar.style.width='50%';
+    const r=await fetch('/api/photos/upload',{method:'POST',body:form});
+    bar.style.width='100%';
+    const data=await r.json();
+    if(r.ok){stat.textContent=t('upload.done',data.uploaded.length,data.errors.length);toast(t('upload.toast',data.uploaded.length),'success');loadAlbums();}
+    else{stat.textContent='Error: '+data.error;}
+    setTimeout(()=>{prog.classList.remove('visible');bar.style.width='0';},4000);
+    document.getElementById('file-input').value='';
+  }catch{if(stat)stat.textContent=t('upload.fail');}
+}
+
+// ── THUMBS ──────────────────────────────────────────────────────────
+async function loadThumb(id,idx){
+  try{
+    const r=await fetch(`/api/photos/${id}/thumb`);
+    const ph=document.getElementById(`tp-${id}`);
+    if(!r.ok){
+      if(!ph)return;
+      if(r.status===423){ // pending re-encryption by owner
+        const pend=document.createElement('div');
+        pend.className='thumb-pending';
+        pend.innerHTML='<span class="tp-icon">🔒</span><span>'+t('photo.pending')+'</span>';
+        ph.replaceWith(pend);
+      } else if(r.status===401){
+        const data=await r.json().catch(()=>({}));
+        if(data.code==='DEK_MISSING'){toast(t('relogin.required'),'error');}
+      }
+      return;
+    }
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    lbThumbUrls[id]=url;
+    if(!ph)return;
+    const img=document.createElement('img');
+    img.className='photo-thumb';
+    img.src=url;
+    img.alt='';
+    img.draggable=false;
+    ph.replaceWith(img);
+    lbThumbCache[id]=url;
+  }catch(e){console.warn('loadThumb error:',id,e);}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LIGHTBOX with navigation
+// ═══════════════════════════════════════════════════════════════════
+function openLightbox(idx){
+  lbPhotos=currentPhotos;lbIndex=idx;
+  document.getElementById('lightbox').classList.add('open');
+  renderLightbox();
+  buildStrip();
+}
+
+function renderLightbox(){
+  const p=lbPhotos[lbIndex];if(!p)return;
+  document.getElementById('lb-title').textContent=p.originalName;
+  document.getElementById('lb-counter').textContent=`${lbIndex+1} / ${lbPhotos.length}`;
+  document.getElementById('lb-prev').disabled=lbIndex===0;
+  document.getElementById('lb-next').disabled=lbIndex===lbPhotos.length-1;
+
+  // Canvas-based rendering: prevents "Save image as" from getting a usable URL
+  const canvas=document.getElementById('lightbox-img');
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  function drawOnCanvas(blobUrl){
+    const tmpImg=new Image();
+    tmpImg.onload=()=>{
+      // Size canvas to fit viewport
+      const maxW=window.innerWidth*0.9;
+      const maxH=(window.innerHeight-120)*0.9;
+      const scale=Math.min(maxW/tmpImg.width,maxH/tmpImg.height,1);
+      canvas.width=tmpImg.width*scale;
+      canvas.height=tmpImg.height*scale;
+      ctx.drawImage(tmpImg,0,0,canvas.width,canvas.height);
+      // Subtle watermark with username
+      if(me&&me.username) window.addWatermark(canvas,me.username);
+      URL.revokeObjectURL(blobUrl); // free memory immediately
+    };
+    tmpImg.src=blobUrl;
+  }
+
+  if(lbThumbUrls[p.id]){
+    // Re-fetch so we get a fresh blob (cached URL was revoked)
+    fetch(`/api/photos/${p.id}/thumb`).then(r=>r.blob()).then(b=>drawOnCanvas(URL.createObjectURL(b))).catch(()=>{});
+  } else {
+    fetch(`/api/photos/${p.id}/thumb`).then(r=>r.blob()).then(b=>{
+      const url=URL.createObjectURL(b);lbThumbUrls[p.id]=url;drawOnCanvas(URL.createObjectURL(b));
+    }).catch(()=>{});
+  }
+  // Highlight active strip thumb
+  document.querySelectorAll('.lb-strip-thumb').forEach((el,i)=>{
+    el.classList.toggle('active',i===lbIndex);
+  });
+  // Scroll strip to active
+  const strip=document.getElementById('lb-strip');
+  const active=strip.children[lbIndex];
+  if(active)active.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+}
+
+function buildStrip(){
+  const strip=document.getElementById('lb-strip');strip.innerHTML='';
+  lbPhotos.forEach((p,i)=>{
+    const img=document.createElement('img');img.className='lb-strip-thumb';
+    img.alt='';img.loading='lazy';
+    if(lbThumbUrls[p.id])img.src=lbThumbUrls[p.id];
+    else img.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // transparent placeholder
+    img.addEventListener('click',()=>{lbIndex=i;renderLightbox();});
+    img.classList.toggle('active',i===lbIndex);
+    strip.appendChild(img);
+    // Lazy load strip thumbs
+    if(!lbThumbUrls[p.id]){
+      fetch(`/api/photos/${p.id}/thumb`).then(r=>r.blob()).then(b=>{
+        const url=URL.createObjectURL(b);lbThumbUrls[p.id]=url;img.src=url;
+        // Also update main if this is current
+        if(lbIndex===i)document.getElementById('lightbox-img').src=url;
+      }).catch(()=>{});
+    }
+  });
+}
+
+function lbNavigate(dir){
+  lbIndex=Math.max(0,Math.min(lbPhotos.length-1,lbIndex+dir));
+  renderLightbox();
+}
+
+function closeLightbox(){
+  document.getElementById('lightbox').classList.remove('open');
+  const canvas=document.getElementById('lightbox-img');
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown',e=>{
+  const lb=document.getElementById('lightbox');
+  if(!lb.classList.contains('open'))return;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown')lbNavigate(1);
+  else if(e.key==='ArrowLeft'||e.key==='ArrowUp')lbNavigate(-1);
+  else if(e.key==='Escape')closeLightbox();
+});
+
+// Click outside image to close
+document.getElementById('lightbox').addEventListener('click',e=>{if(e.target===e.currentTarget)closeLightbox();});
+document.getElementById('lb-img-overlay').addEventListener('click',()=>closeLightbox());
+
+// ── Touch / Swipe support ──────────────────────────────────────────
+(function(){
+  const lb=document.getElementById('lightbox');
+  let touchStartX=0,touchStartY=0,touchStartTime=0;
+
+  lb.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1)return;
+    touchStartX=e.touches[0].clientX;
+    touchStartY=e.touches[0].clientY;
+    touchStartTime=Date.now();
+  },{passive:true});
+
+  lb.addEventListener('touchend',e=>{
+    if(e.changedTouches.length!==1)return;
+    const dx=e.changedTouches[0].clientX-touchStartX;
+    const dy=e.changedTouches[0].clientY-touchStartY;
+    const dt=Date.now()-touchStartTime;
+    const absDx=Math.abs(dx),absDy=Math.abs(dy);
+
+    // Must be fast enough (<400ms), horizontal enough (2x more than vertical)
+    // and long enough (>40px) to count as a swipe
+    if(dt<400&&absDx>40&&absDx>absDy*1.5){
+      if(dx<0)lbNavigate(1);   // swipe left  → next
+      else    lbNavigate(-1);  // swipe right → prev
+    }
+    // Short tap on background (not on image/controls) → close
+    else if(dt<200&&absDx<10&&absDy<10){
+      const target=e.changedTouches[0].target;
+      if(target===lb||target.id==='lb-img-overlay')closeLightbox();
+    }
+  },{passive:true});
+})();
+
+// ═══════════════════════════════════════════════════════════════════
+// ALBUM CRUD
+// ═══════════════════════════════════════════════════════════════════
+function openNewAlbumModal(parentId){
+  albumModalMode='create';albumModalParentId=parentId;
+  const pa=parentId?allAlbums.find(a=>a.id===parentId):null;
+  document.getElementById('modal-album-title').textContent=pa?t('album.new_sub_title',pa.name):t('album.new_title');
+  document.getElementById('album-name').value='';document.getElementById('album-desc').value='';
+  const btn=document.getElementById('album-modal-confirm');btn.textContent=t('btn.create');btn.onclick=doCreateAlbum;
+  document.getElementById('modal-album').classList.add('open');
+  setTimeout(()=>document.getElementById('album-name').focus(),50);
+}
+function openEditAlbumModal(album){
+  albumModalMode='edit';albumModalEditId=album.id;
+  document.getElementById('modal-album-title').textContent=t('album.edit_title',album.name);
+  document.getElementById('album-name').value=album.name;document.getElementById('album-desc').value=album.description||'';
+  const btn=document.getElementById('album-modal-confirm');btn.textContent=t('btn.save');btn.onclick=doEditAlbum;
+  document.getElementById('modal-album').classList.add('open');
+  setTimeout(()=>document.getElementById('album-name').focus(),50);
+}
+async function doCreateAlbum(){
+  const name=document.getElementById('album-name').value.trim();
+  const description=document.getElementById('album-desc').value.trim();
+  if(!name)return;
+  const r=await api('POST','/api/albums',{name,description,parentId:albumModalParentId});
+  if(r.ok){const album=await r.json();closeModal('modal-album');toast(t('albums.created'),'success');await loadAlbums();expandedAlbums.add(albumModalParentId||album.id);selectAlbum(album.id);}
+  else toast((await r.json()).error,'error');
+}
+async function doEditAlbum(){
+  const name=document.getElementById('album-name').value.trim();
+  const description=document.getElementById('album-desc').value.trim();
+  if(!name)return;
+  const r=await api('PUT',`/api/albums/${albumModalEditId}`,{name,description});
+  if(r.ok){closeModal('modal-album');toast(t('albums.updated'),'success');loadAlbums();}
+  else toast((await r.json()).error,'error');
+}
+async function deleteAlbum(id){
+  if(!confirm(t('albums.confirm_delete')))return;
+  const r=await fetch(`/api/albums/${id}`,{method:'DELETE'});
+  if(r.ok){toast(t('albums.deleted'),'success');if(currentAlbumId===id){currentAlbumId=null;document.getElementById('album-content').innerHTML=`<div class="no-album-selected"><div class="big-icon">📁</div><p>${t('albums.select_hint')}</p></div>`;}loadAlbums();}
+  else toast((await r.json()).error,'error');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// USERS
+// ═══════════════════════════════════════════════════════════════════
+function usernameById(id){const u=allUsers.find(x=>x.id===id);return u?u.username:'';}
+document.getElementById('users-tbody').addEventListener('click',e=>{
+  const btn=e.target.closest('[data-act]');if(!btn)return;
+  const id=btn.dataset.id;
+  if(btn.dataset.act==='permalbum')openAlbumPermModal(id,usernameById(id));
+  else if(btn.dataset.act==='resetpw')openResetPw(id,usernameById(id));
+  else if(btn.dataset.act==='deluser')deleteUser(id);
+});
+async function loadUsers(){
+  const r=await fetch('/api/users');allUsers=await r.json();
+  allUsers.sort((a,b)=>(a.parentUserId?a.parentName+'1':a.username+'0').localeCompare(b.parentUserId?b.parentName+'1':b.username+'0'));
+  document.getElementById('users-tbody').innerHTML=allUsers.map(u=>`
+    <tr>
+      <td>${u.type==='observer'?`<span style="color:var(--muted)">↳ 👁</span> `:''}<strong>${esc(u.username)}</strong>${u.type==='observer'?` <span style="font-size:11px;color:var(--muted)">(${esc(u.parentName||'')})</span>`:''}</td>
+      <td>${u.role==='admin'?'<span class="admin-pill">Admin</span>':t('role.user')}</td>
+      <td>${fmtDate(u.createdAt)}</td>
+      <td>${u.role==='admin'?`<span style="color:var(--muted);font-size:12px">${t('users.all_albums')}</span>`
+        :`<span style="font-size:12px;color:var(--muted)">${t('users.albums_count',(u.canViewAlbums||[]).length)}</span>
+          <button class="btn btn-ghost btn-xs" style="margin-left:8px" data-act="permalbum" data-id="${u.id}">${t('users.album_rights')}</button>`}</td>
+      <td><div class="td-actions">
+        <button class="btn btn-ghost btn-sm" data-act="resetpw" data-id="${u.id}">${t('users.reset_pw')}</button>
+        ${u.id!==me.id?`<button class="btn btn-danger btn-sm" data-act="deluser" data-id="${u.id}">${t('users.delete')}</button>`:`<span style="color:var(--muted);font-size:12px">${t('users.me')}</span>`}
+      </div></td>
+    </tr>`).join('');
+}
+function openNewUserModal(){['nu-name','nu-pass'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-new-user').classList.add('open');}
+async function createUser(){
+  const username=document.getElementById('nu-name').value.trim();
+  const password=document.getElementById('nu-pass').value;
+  const role=document.getElementById('nu-role').value;
+  if(!username||!password){toast(t('err.required'),'error');return;}
+  const r=await api('POST','/api/users',{username,password,role});
+  const data=await r.json();
+  if(r.ok){toast(t('users.created'),'success');closeModal('modal-new-user');loadUsers();}else toast(data.error,'error');
+}
+async function deleteUser(id){
+  if(!confirm(t('users.confirm_delete')))return;
+  const r=await fetch(`/api/users/${id}`,{method:'DELETE'});
+  if(r.ok){toast(t('users.deleted'),'success');loadUsers();}else toast((await r.json()).error,'error');
+}
+function openAlbumPermModal(userId,username){
+  albumPermTargetId=userId;document.getElementById('albumperm-uname').textContent=username;
+  const user=allUsers.find(u=>u.id===userId);const current=user?.canViewAlbums||[];
+  document.getElementById('album-perm-tree').innerHTML=renderPermTree(null,0,current);
+  document.getElementById('modal-album-perm').classList.add('open');
+}
+function renderPermTree(parentId,depth,current){
+  return albumChildren(parentId).map(album=>{
+    const indent=depth*16;const checked=current.includes(album.id)?'checked':'';
+    const owner=allUsers.find(u=>u.id===album.ownerId)?.username??'?';
+    return `<label class="perm-album-item">
+      <div class="perm-album-indent" style="width:${indent}px"></div>
+      <input type="checkbox" value="${album.id}" ${checked}>
+      <span>${esc(album.name)}</span>
+      <span class="perm-album-owner">@${esc(owner)}</span>
+    </label>${renderPermTree(album.id,depth+1,current)}`;
+  }).join('');
+}
+async function saveAlbumPermissions(){
+  const checked=[...document.querySelectorAll('#album-perm-tree input:checked')].map(c=>c.value);
+  const r=await api('PUT',`/api/users/${albumPermTargetId}/album-permissions`,{canViewAlbums:checked});
+  if(r.ok){toast(t('perm.saved'),'success');closeModal('modal-album-perm');loadUsers();}else toast(t('perm.save_err'),'error');
+}
+function openResetPw(id,username){resetTargetId=id;document.getElementById('reset-uname').textContent=username;document.getElementById('reset-pw').value='';document.getElementById('modal-reset-pw').classList.add('open');}
+async function doResetPassword(){
+  const pw=document.getElementById('reset-pw').value;
+  if(!pw||pw.length<6){toast(t('account.pw_short'),'error');return;}
+  const r=await api('PUT',`/api/users/${resetTargetId}/password`,{password:pw});
+  if(r.ok){toast(t('pw.set'),'success');closeModal('modal-reset-pw');}else toast((await r.json()).error,'error');
+}
+
+// ACCOUNT
+async function changePassword(){
+  const current=document.getElementById('pw-current').value;
+  const next=document.getElementById('pw-new').value;
+  const confirm=document.getElementById('pw-confirm').value;
+  if(next!==confirm){toast(t('account.pw_mismatch'),'error');return;}
+  if(next.length<8){toast(t('setup.pw_short'),'error');return;}
+  const r=await api('PUT','/api/me/password',{currentPassword:current,newPassword:next});
+  if(r.ok){toast(t('account.pw_changed'),'success');['pw-current','pw-new','pw-confirm'].forEach(id=>document.getElementById(id).value='');}
+  else toast((await r.json()).error,'error');
+}
+
+// HELPERS
+function api(method,url,body){return fetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function toast(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className=`show ${type}`;clearTimeout(toast._t);toast._t=setTimeout(()=>el.className='',3000);}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;');}
+function fmtDate(ts){return new Date(ts).toLocaleDateString(lang==='de'?'de-DE':'en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});}
+
+// ═══════════════════════════════════════════════════════════════════
+// DOWNLOAD PROTECTION
+// ═══════════════════════════════════════════════════════════════════
+(function() {
+
+  // 1. Block right-click context menu on photo elements
+  document.addEventListener('contextmenu', e => {
+    const isProtected =
+      e.target.closest('#lightbox') ||
+      e.target.closest('.photo-img-wrap') ||
+      e.target.closest('.lb-strip') ||
+      e.target.classList.contains('photo-thumb') ||
+      e.target.classList.contains('lb-strip-thumb') ||
+      e.target.id === 'lightbox-img';
+    if (isProtected) {
+      e.preventDefault();
+      return false;
+    }
+  });
+
+  // 2. Block drag-and-drop of images (another way to extract)
+  document.addEventListener('dragstart', e => {
+    if (e.target.tagName === 'IMG') {
+      e.preventDefault();
+      return false;
+    }
+  });
+
+  // 3. Block common keyboard shortcuts for saving
+  document.addEventListener('keydown', e => {
+    const lb = document.getElementById('lightbox');
+    if (!lb || !lb.classList.contains('open')) return;
+    const key = e.key.toLowerCase();
+    // Block Ctrl/Cmd + S (save), Ctrl/Cmd + Shift + S, PrintScreen
+    if ((e.ctrlKey || e.metaKey) && (key === 's' || key === 'u')) {
+      e.preventDefault(); return false;
+    }
+    if (e.key === 'PrintScreen') {
+      e.preventDefault(); return false;
+    }
+  }, true); // capture phase
+
+  // 4. Render lightbox image on Canvas instead of <img> src
+  // This prevents "Save image as" from getting the real URL
+  // and makes the image non-draggable at the pixel level
+  window.renderImageOnCanvas = function(blobUrl, canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      // Fit inside canvas maintaining aspect ratio
+      const maxW = canvas.clientWidth  || canvas.width;
+      const maxH = canvas.clientHeight || canvas.height;
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      canvas.width  = img.width  * scale;
+      canvas.height = img.height * scale;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(blobUrl); // immediately free the blob URL
+    };
+    img.src = blobUrl;
+  };
+
+  // 5. Watermark canvas overlay (optional subtle protection)
+  window.addWatermark = function(canvas, username) {
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${Math.max(14, canvas.width * 0.02)}px DM Sans, sans-serif`;
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 6);
+    const text = `Vermeer · ${username}`;
+    const cols = Math.ceil(canvas.width  / 300) + 2;
+    const rows = Math.ceil(canvas.height / 150) + 2;
+    for (let r = -rows; r <= rows; r++) {
+      for (let c = -cols; c <= cols; c++) {
+        ctx.fillText(text, c * 300 - 150, r * 150);
+      }
+    }
+    ctx.restore();
+  };
+
+})();
+
+// Dismissible modals: click on backdrop closes (NOT setup/recovery-code – those are mandatory)
+['modal-album','modal-new-user','modal-album-perm','modal-reset-pw','modal-recover'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el)el.addEventListener('click',e=>{if(e.target===el)closeModal(id);});
+});
+// Enter key submits album modal
+(function(){
+  const an=document.getElementById('album-name');
+  if(an)an.addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('album-modal-confirm').click();});
+})();
+
+applyTranslations();
+checkSession();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# This directory is used by Umbrel as APP_DATA_DIR.
+# It will be populated at runtime with:
+#   photos/    - AES-256 encrypted photo files
+#   thumbs/    - AES-256 encrypted thumbnails
+#   sessions/  - server sessions
+#   db.json    - user and album metadata

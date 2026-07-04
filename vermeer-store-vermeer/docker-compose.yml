@@ -1,0 +1,23 @@
+services:
+  app_proxy:
+    image: getumbrel/app-proxy:1.0.0
+    environment:
+      APP_HOST: vermeer-store-vermeer_web_1
+      APP_PORT: 3000
+      PROXY_AUTH_ADD: "false"
+    ports:
+      - "3769:3769"
+    restart: on-failure
+
+  web:
+    image: cfi700/vermeer:1.0.0
+    restart: on-failure
+    stop_grace_period: 1m
+    volumes:
+      - ${APP_DATA_DIR}/data:/data
+    environment:
+      - ENCRYPTION_KEY=${APP_SEED}
+      - SESSION_SECRET=${APP_PASSWORD}
+      - PORT=3000
+      - DATA_DIR=/data
+      - NODE_ENV=production
