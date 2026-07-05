@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.4';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -259,7 +259,7 @@ function migrateUserPhotos(userId, dek, familyDek) {
       } catch (e) { console.error('Migration decrypt failed:', p.id, e.message); continue; }
 
       let target;
-      if (p.shared || albumIsGranted(db, p.albumId)) target = { key: SHARED_KEY, enc: 'shared' };
+      if (albumIsGranted(db, p.albumId)) target = { key: SHARED_KEY, enc: 'shared' };
       else if (albumIsFamilyGranted(db, p.albumId) && familyDek) target = { key: familyDek, enc: 'family' };
       else target = { key: dek, enc: 'user' };
 
@@ -664,14 +664,6 @@ app.get('/api/albums', requireAuth, (req, res) => {
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
 
-  if (me.type !== 'observer') {
-    const sharedCount = db.photos.filter(p => p.shared).length;
-    if (sharedCount > 0 || me.type === 'admin') {
-      albums.unshift({ id: SHARED_ALBUM_ID, name: '📢 Shared Photos', parentId: null, ownerId: null, ownerName: '',
-        description: '', createdAt: 0, photoCount: sharedCount, coverPhotoId: null,
-        hidden: false, effectiveHidden: false, locked: false, canUpload: false, canManage: false, _virtual: true });
-    }
-  }
   res.json(albums);
 });
 
@@ -811,66 +803,6 @@ app.post('/api/photos/upload', requireAuth, requireDEK, (req, res) => {
 });
 
 // ═══ SHARE / UNSHARE ══════════════════════════════════════════════
-app.post('/api/photos/share', requireAuth, (req, res) => {
-  const { photoIds, shared } = req.body;
-  if (!Array.isArray(photoIds) || !photoIds.length) return res.status(400).json({ error: 'photoIds required' });
-  const db = loadDB();
-  const me = getUser(db, req);
-  if (me.type === 'observer') return res.status(403).json({ error: 'Observers cannot share' });
-  const dek = dekCache.get(req.sessionID);
-  const fam = familyCache.get(req.sessionID);
-  const wantShared = shared !== false;
-  let updated = 0, skipped = 0;
-  for (const id of photoIds) {
-    const photo = db.photos.find(p => p.id === id);
-    if (!photo) continue;
-    if (photo.ownerId !== req.session.userId && me.type !== 'admin') continue;
-    try {
-      const photoPath = path.join(PHOTOS_DIR, `${photo.id}.enc`);
-      const thumbPath = path.join(THUMBS_DIR, `${photo.id}.enc`);
-      if (wantShared && photo.encryption !== 'shared') {
-        let plain, thumbPlain = null;
-        if (!photo.encryption) {
-          plain = decryptLegacyCBC(fs.readFileSync(photoPath), photo.iv);
-          if (fs.existsSync(thumbPath)) thumbPlain = decryptLegacyCBC(fs.readFileSync(thumbPath), photo.thumbIv);
-        } else {
-          const cur = photo.encryption === 'family' ? fam : dek;
-          if (!cur || photo.ownerId !== req.session.userId) { skipped++; continue; }
-          plain = decryptGCM(fs.readFileSync(photoPath), cur, photo.iv, photo.tag);
-          if (fs.existsSync(thumbPath)) thumbPlain = decryptGCM(fs.readFileSync(thumbPath), cur, photo.thumbIv, photo.thumbTag);
-        }
-        const e1 = encryptGCM(plain, SHARED_KEY);
-        fs.writeFileSync(photoPath, e1.data);
-        photo.iv = e1.iv; photo.tag = e1.tag;
-        if (thumbPlain) { const e2 = encryptGCM(thumbPlain, SHARED_KEY); fs.writeFileSync(thumbPath, e2.data); photo.thumbIv = e2.iv; photo.thumbTag = e2.tag; }
-        photo.encryption = 'shared';
-      }
-      if (!wantShared && photo.encryption === 'shared' && !albumIsGranted(db, photo.albumId)) {
-        if (photo.ownerId === req.session.userId && dek) {
-          const useFam = albumIsFamilyGranted(db, photo.albumId) && fam;
-          const target = useFam ? fam : dek;
-          const plain = decryptGCM(fs.readFileSync(photoPath), SHARED_KEY, photo.iv, photo.tag);
-          const e1 = encryptGCM(plain, target);
-          fs.writeFileSync(photoPath, e1.data);
-          photo.iv = e1.iv; photo.tag = e1.tag;
-          if (fs.existsSync(thumbPath)) {
-            const tp = decryptGCM(fs.readFileSync(thumbPath), SHARED_KEY, photo.thumbIv, photo.thumbTag);
-            const e2 = encryptGCM(tp, target);
-            fs.writeFileSync(thumbPath, e2.data);
-            photo.thumbIv = e2.iv; photo.thumbTag = e2.tag;
-          }
-          photo.encryption = useFam ? 'family' : 'user';
-        }
-      }
-      photo.shared = wantShared;
-      updated++;
-    } catch (e) { console.error('Share error', photo.id, e.message); skipped++; }
-  }
-  saveDB(db);
-  res.json({ success: true, updated, skipped });
-});
-
-// ═══ PHOTO LISTING / SERVING ══════════════════════════════════════
 app.get('/api/albums/:albumId/photos', requireAuth, (req, res) => {
   const db = loadDB();
   const me = getUser(db, req);
@@ -884,10 +816,7 @@ app.get('/api/albums/:albumId/photos', requireAuth, (req, res) => {
       canDownload: p.ownerId === req.session.userId && me.type !== 'observer',
       canShare: p.ownerId === req.session.userId && me.type !== 'observer' };
   };
-  if (albumId === SHARED_ALBUM_ID) {
-    if (me.type === 'observer') return res.status(403).json({ error: 'No access' });
-    return res.json(db.photos.filter(p => p.shared).map(mapPhoto).sort((a, b) => b.uploadedAt - a.uploadedAt));
-  }
+  if (albumId === SHARED_ALBUM_ID) return res.status(403).json({ error: 'Sharing removed' });
   if (!canViewAlbum(db, req.session.userId, albumId)) return res.status(403).json({ error: 'No access to album' });
   if (effectiveHidden(db, albumId) && !isUnlocked(req, db, albumId))
     return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });

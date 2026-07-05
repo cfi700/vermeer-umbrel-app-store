@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "1.0.3"
+version: "1.0.4"
 tagline: Encrypted photo albums – private by design
 description: >-
   Vermeer stores your photos AES-256 encrypted on your Umbrel.
@@ -24,10 +24,9 @@ description: >-
   Default login: admin / admin (change immediately!)
 
 releaseNotes: >-
-  1.0.3 – Lightbox now displays photos in full original resolution
-  (progressive: thumbnail first, then the original), filling the
-  entire screen. Uploads were never downscaled; the viewer previously
-  only showed the 400px thumbnail.
+  1.0.4 – Removed the global quick-share feature (superseded by
+  observer album grants). Hidden albums now use an elegant crossed-eye
+  icon instead of the monkey emoji.
 
 developer: Vermeer
 website: https://github.com/cfi700/vermeer-umbrel-app-store

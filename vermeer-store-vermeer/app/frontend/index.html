@@ -856,7 +856,7 @@ const T = {
     'hide.info':'ℹ Der PIN ist ein Sichtschutz, kein kryptografischer Schutz. Die Fotos bleiben wie gewohnt verschlüsselt. Unteralben werden mit versteckt.',
     'hide.unhide_desc':'Zum Sichtbarmachen bitte dein Account-Passwort eingeben.',
     'hide.hidden':'Album versteckt','hide.unhidden':'Album ist wieder sichtbar',
-    'hide.btn':'🙈 Verstecken','hide.unhide_btn':'👁 Sichtbar machen',
+    'hide.btn':'🕶 Verstecken','hide.unhide_btn':'👁 Sichtbar machen',
     'hide.pin_invalid':'PIN muss genau 4 Ziffern haben',
     'tile.hidden_album':'Verstecktes Album','tile.subalbums':(n)=>`${n} Unteralbum${n!==1?'en':''}`,
     'settings.title':'Anzeige','settings.watermark':'Wasserzeichen in der Großansicht anzeigen',
@@ -979,7 +979,7 @@ const T = {
     'hide.info':'ℹ The PIN is a visibility lock, not cryptographic protection. Photos remain encrypted as usual. Sub-albums are hidden too.',
     'hide.unhide_desc':'Enter your account password to make the album visible again.',
     'hide.hidden':'Album hidden','hide.unhidden':'Album is visible again',
-    'hide.btn':'🙈 Hide','hide.unhide_btn':'👁 Unhide',
+    'hide.btn':'🕶 Hide','hide.unhide_btn':'👁 Unhide',
     'hide.pin_invalid':'PIN must be exactly 4 digits',
     'tile.hidden_album':'Hidden album','tile.subalbums':(n)=>`${n} sub-album${n!==1?'s':''}`,
     'settings.title':'Display','settings.watermark':'Show watermark in full view',
@@ -1422,7 +1422,7 @@ function openObsAlbumsModal(obsId,name){
   const mine=allAlbums.filter(a=>a.ownerId===me.id);
   document.getElementById('obs-album-tree').innerHTML=mine.map(a=>{
     const checked=current.includes(a.id)?'checked':'';
-    return `<label class="perm-album-item"><input type="checkbox" value="${a.id}" ${checked}><span>${a.effectiveHidden?'🙈 ':''}${esc(a.name)}</span></label>`;
+    return `<label class="perm-album-item"><input type="checkbox" value="${a.id}" ${checked}><span>${a.effectiveHidden?'🕶 ':''}${esc(a.name)}</span></label>`;
   }).join('')||`<div style="padding:12px;color:var(--muted);font-size:13px">${t('albums.no_albums')}</div>`;
   document.getElementById('modal-obs-albums').classList.add('open');
 }
@@ -1527,8 +1527,6 @@ async function loadAlbumContent(albumId){
     selBar.innerHTML=`<span class="selection-count" id="sel-count"></span>
       <button class="btn btn-ghost btn-sm" onclick="toggleSelectAll()" id="btn-sel-all">${t('selection.select_all')}</button>
       <button class="btn btn-ghost btn-sm" onclick="downloadSelected()" id="btn-dl" style="display:none">${t('selection.download')}</button>
-      <button class="btn btn-ghost btn-sm" onclick="shareSelected(true)"  id="btn-share"    style="display:none">${t('selection.share')}</button>
-      <button class="btn btn-ghost btn-sm" onclick="shareSelected(false)" id="btn-unshare"  style="display:none">${t('selection.unshare')}</button>
       <button class="btn btn-ghost btn-sm" onclick="setCoverSelected()" id="btn-cover" style="display:none">${t('cover.set_btn')}</button>
       <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btn-del-sel" style="display:none">${t('selection.delete')}</button>`;
     content.appendChild(selBar);
@@ -1565,7 +1563,7 @@ function buildAlbumTile(a){
   const subCount=allAlbums.filter(x=>x.parentId===a.id).length;
 
   if(a.locked){
-    const big=document.createElement('div');big.className='at-bigicon';big.textContent='🙈';tile.appendChild(big);
+    const big=document.createElement('div');big.className='at-bigicon';big.innerHTML='<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#c8a96e" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2M9.9 4.6A9.8 9.8 0 0121 12c-.7 1.2-1.6 2.3-2.6 3.2M6.2 6.2A9.9 9.9 0 003 12a9.9 9.9 0 0014.8 4.9"/></svg>';tile.appendChild(big);
   } else if(a.coverPhotoId){
     const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':'📁';tile.appendChild(big);
     fetch(`/api/photos/${a.coverPhotoId}/thumb`).then(r=>r.ok?r.blob():null).then(b=>{
@@ -1576,13 +1574,13 @@ function buildAlbumTile(a){
       tile.insertBefore(img,tile.firstChild);
     }).catch(()=>{});
   } else {
-    const big=document.createElement('div');big.className='at-bigicon';big.textContent=a._virtual?'📢':(a.hidden?'🙈':'📁');tile.appendChild(big);
+    const big=document.createElement('div');big.className='at-bigicon';if(a.hidden){big.innerHTML='<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#c8a96e" stroke-width="1.6" stroke-linecap="round"><path d="M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2M9.9 4.6A9.8 9.8 0 0121 12c-.7 1.2-1.6 2.3-2.6 3.2M6.2 6.2A9.9 9.9 0 003 12a9.9 9.9 0 0014.8 4.9"/></svg>';}else{big.textContent='📁';}tile.appendChild(big);
   }
 
   const shade=document.createElement('div');shade.className='at-shade';tile.appendChild(shade);
   const info=document.createElement('div');info.className='at-info';
   const nm=document.createElement('div');nm.className='at-name';
-  nm.textContent=(a.effectiveHidden?'🙈 ':'')+a.name;
+  nm.textContent=a.name;
   const meta=document.createElement('div');meta.className='at-meta';
   if(a.locked){meta.textContent='🔒 PIN';}
   else{
@@ -1598,7 +1596,7 @@ function buildAlbumTile(a){
     const mk=(icon,title,fn)=>{const b=document.createElement('button');b.className='at-act-btn';b.textContent=icon;b.title=title;
       b.addEventListener('click',e=>{e.stopPropagation();fn();});return b;};
     acts.appendChild(mk('✏️',t('albums.rename'),()=>openEditAlbumModal(a)));
-    acts.appendChild(mk(a.hidden?'👁':'🙈',a.hidden?t('hide.unhide_btn'):t('hide.btn'),()=>openHideModal(a)));
+    acts.appendChild(mk(a.hidden?'👁':'🕶',a.hidden?t('hide.unhide_btn'):t('hide.btn'),()=>openHideModal(a)));
     acts.appendChild(mk('🗑',t('albums.delete'),()=>deleteAlbum(a.id)));
     tile.appendChild(acts);
     // Long-Press (Mobil) zeigt Aktionen
@@ -1647,13 +1645,6 @@ async function loadPhotos(albumId,wrap){
         imgWrap.appendChild(chk);
       }
 
-      // Shared badge
-      if(p.shared){
-        const badge=document.createElement('span');
-        badge.className='shared-badge';
-        badge.textContent=t('photo.shared_badge');
-        imgWrap.appendChild(badge);
-      }
 
       // Placeholder (replaced by thumb after load)
       const ph=document.createElement('div');
@@ -1732,23 +1723,6 @@ function updateSelectionBar(){
   const btnAll=document.getElementById('btn-sel-all');
   const btnDl=document.getElementById('btn-dl');
   const btnDel=document.getElementById('btn-del-sel');
-  const btnShare=document.getElementById('btn-share');
-  const btnUnshare=document.getElementById('btn-unshare');
-  if(!bar)return;
-  const n=selectedPhotos.size;
-  bar.classList.toggle('visible',n>0);
-  if(count)count.textContent=n>0?t('selection.count',n):t('selection.none');
-  if(btnAll)btnAll.textContent=n===currentPhotos.length?t('selection.deselect_all'):t('selection.select_all');
-  const selPhotos=[...selectedPhotos].map(id=>currentPhotos.find(p=>p.id===id)).filter(Boolean);
-  // Download: only if all selected can be downloaded
-  const canDl=n>0&&selPhotos.every(p=>p.canDownload);
-  if(btnDl)btnDl.style.display=canDl?'':'none';
-  // Share/Unshare: only own photos or admin
-  const canShare=n>0&&selPhotos.every(p=>p.canShare);
-  const allShared=canShare&&selPhotos.every(p=>p.shared);
-  const noneShared=canShare&&selPhotos.every(p=>!p.shared);
-  if(btnShare)btnShare.style.display=(canShare&&!allShared)?'':'none';
-  if(btnUnshare)btnUnshare.style.display=(canShare&&!noneShared)?'':'none';
   // Delete: only own or admin
   const canDel=n>0&&selPhotos.every(p=>p.ownerId===me.id||me.role==='admin');
   if(btnDel)btnDel.style.display=canDel?'':'none';
@@ -1766,15 +1740,6 @@ async function downloadSelected(){
   }
 }
 
-async function shareSelected(shared){
-  const ids=[...selectedPhotos];
-  const r=await api('POST','/api/photos/share',{photoIds:ids,shared});
-  if(r.ok){
-    const data=await r.json();
-    toast(shared?t('selection.shared',data.updated):t('selection.unshared',data.updated),'success');
-    selectedPhotos.clear();await loadAlbums();loadAlbumContent(currentAlbumId);
-  } else toast((await r.json()).error,'error');
-}
 
 async function setCoverSelected(){
   if(selectedPhotos.size!==1||!currentAlbumId)return;
