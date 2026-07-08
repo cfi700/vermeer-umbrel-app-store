@@ -338,6 +338,8 @@
   .album-tile .at-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
     user-select:none;-webkit-user-drag:none;pointer-events:none}
   .album-tile .at-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.75) 0%,rgba(0,0,0,.15) 55%,transparent 100%)}
+  .album-tile.has-cover .at-info{display:none}
+  .album-tile.has-cover .at-shade{background:none}
   .album-tile .at-info{position:absolute;left:10px;right:10px;bottom:8px;z-index:2}
   .album-tile .at-name{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.6)}
   .album-tile .at-meta{font-size:11px;color:rgba(255,255,255,.75);display:flex;gap:8px;align-items:center}
@@ -366,6 +368,18 @@
     .photo-check{width:26px;height:26px}
     .content-toolbar{position:sticky;top:56px;z-index:50}
   }
+
+  .stat-photo-link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .stat-photo-link:hover{opacity:.8}
+  #stat-preview-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:none;align-items:center;justify-content:center;padding:20px}
+  #stat-preview-backdrop.open{display:flex}
+  .stat-preview-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;max-width:min(90vw,720px);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .stat-preview-card img{max-width:100%;max-height:60vh;border-radius:8px;display:block;margin:0 auto}
+  .stat-preview-title{font-weight:600;margin-bottom:10px;word-break:break-all}
+  .stat-preview-viewers{margin-top:14px;border-top:1px solid var(--border);padding-top:12px}
+  .stat-preview-viewers h4{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px}
+  .stat-viewer-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:var(--text)}
+  .stat-viewer-row span:last-child{color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
@@ -416,7 +430,7 @@
       <label data-i18n="account.confirm_pw"></label>
       <input type="password" id="setup-pw2" placeholder="••••••••">
     </div>
-    <div class="info-box" data-i18n="setup.info"></div>
+    <div class="info-box" id="setup-info-line" data-i18n="setup.info"></div>
     <div class="modal-footer">
       <button class="btn btn-primary btn-full" onclick="doSetupPassword()" data-i18n="setup.submit"></button>
     </div>
@@ -734,6 +748,16 @@
   </div>
 </div>
 
+<div id="stat-preview-backdrop" onclick="if(event.target===this)closeStatPreview()">
+  <div class="stat-preview-card">
+    <div class="stat-preview-title" id="stat-preview-title"></div>
+    <div id="stat-preview-imgwrap"><div class="empty-state"><p>…</p></div></div>
+    <div class="stat-preview-viewers">
+      <h4 data-i18n="stats.viewers_list"></h4>
+      <div id="stat-preview-viewers"></div>
+    </div>
+  </div>
+</div>
 <div id="toast"></div>
 <input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="handleFiles(this.files)">
 
@@ -812,6 +836,7 @@ const T = {
     'stats.total_users':'Benutzer','stats.total_views':'Aufrufe gesamt',
     'stats.total_downloads':'Downloads','stats.storage_mb':'Speicher (MB)',
     'stats.no_data':'Noch keine Daten vorhanden',
+    'stats.viewers':'Betrachter','stats.viewers_list':'Wer hat es angesehen','stats.no_viewers':'Noch niemand',
     'login.forgot':'Passwort vergessen? Mit Recovery-Code wiederherstellen',
     'setup.title':'Neues Passwort festlegen',
     'setup.desc':'Bei der ersten Anmeldung musst du ein eigenes Passwort vergeben. Es dient zugleich als Schlüssel für die Verschlüsselung deiner Fotos.',
@@ -935,6 +960,7 @@ const T = {
     'stats.total_users':'Users','stats.total_views':'Total Views',
     'stats.total_downloads':'Downloads','stats.storage_mb':'Storage (MB)',
     'stats.no_data':'No data available yet',
+    'stats.viewers':'Viewers','stats.viewers_list':'Who viewed it','stats.no_viewers':'Nobody yet',
     'login.forgot':'Forgot password? Restore with recovery code',
     'setup.title':'Set Your New Password',
     'setup.desc':'On first login you must choose your own password. It also serves as the encryption key for your photos.',
@@ -1031,8 +1057,10 @@ async function doLogin(){
 
     // Case A: forced first-login setup
     if(data.mustChangePassword){
-      document.getElementById('setup-existing-warn').style.display=data.hasExistingData?'block':'none';
-      document.getElementById('setup-recovery-group').style.display=data.hasExistingData?'block':'none';
+      const isObs=data.type==='observer';
+      document.getElementById('setup-existing-warn').style.display=(!isObs&&data.hasExistingData)?'block':'none';
+      document.getElementById('setup-recovery-group').style.display=(!isObs&&data.hasExistingData)?'block':'none';
+      document.getElementById('setup-info-line').style.display=isObs?'none':'';
       ['setup-recovery','setup-pw','setup-pw2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
       document.getElementById('modal-setup-pw').classList.add('open');
       return;
@@ -1058,6 +1086,11 @@ async function doSetupPassword(){
   const data=await r.json();
   if(!r.ok){toast(data.error,'error');return;}
   closeModal('modal-setup-pw');
+  if(data.observer||!data.recoveryCode){
+    // Beobachter brauchen keinen Wiederherstellungscode → direkt in die App
+    bootApp();
+    return;
+  }
   showRecoveryCode(data.recoveryCode);
   pendingBoot=true;
 }
@@ -1246,14 +1279,14 @@ function renderStats(s, wrap) {
 
   // ── Top Photos ──
   renderStatsTable(wrap, `🖼 ${t('stats.top_photos')}`, s.topPhotos,
-    [t('stats.photo'), t('stats.album'), t('stats.owner'), t('stats.views'), t('stats.unique'), t('stats.downloads'), ''],
+    [t('stats.photo'), t('stats.album'), t('stats.owner'), t('stats.views'), t('stats.viewers'), t('stats.downloads'), ''],
     (p, i, maxV) => `
       <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
       <td>${esc(p.name)}${p.shared?` <span class="shared-dot"></span>`:''}  </td>
       <td style="color:var(--muted);font-size:12px">${esc(p.albumName)}</td>
       <td style="color:var(--muted);font-size:12px">${esc(p.ownerName)}</td>
       <td><strong>${p.views}</strong></td>
-      <td style="color:var(--muted)">${p.uniqueViewers}</td>
+      <td style="color:var(--muted);font-size:12px;max-width:160px">${(p.viewers&&p.viewers.length)?esc(p.viewers.slice(0,3).map(v=>v.username).join(', '))+(p.viewers.length>3?' +'+(p.viewers.length-3):''):'–'}</td>
       <td style="color:var(--muted)">${p.downloads}</td>
       <td style="width:100px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(p.views/maxV*100)}%"></div></div></td>`,
     p => p.views
@@ -1312,6 +1345,29 @@ function renderStatsTable(wrap, title, rows, headers, rowFn, valueFn) {
     </table>`;
   wrap.appendChild(sec);
 }
+
+// ═══ STATISTIK: FOTO-VORSCHAU ═══
+function openStatPreview(pid, viewersJson, name){
+  document.getElementById('stat-preview-title').textContent=name;
+  const wrap=document.getElementById('stat-preview-imgwrap');
+  wrap.innerHTML='<div class="empty-state"><p>…</p></div>';
+  document.getElementById('stat-preview-backdrop').classList.add('open');
+  fetch(`/api/photos/${pid}/thumb`).then(r=>r.ok?r.blob():null).then(b=>{
+    if(!b){wrap.innerHTML='<div class="empty-state"><p>🔒</p></div>';return;}
+    const img=document.createElement('img');img.src=URL.createObjectURL(b);img.draggable=false;
+    wrap.innerHTML='';wrap.appendChild(img);
+  }).catch(()=>{wrap.innerHTML='<div class="empty-state"><p>–</p></div>';});
+  let viewers=[];try{viewers=JSON.parse(decodeURIComponent(viewersJson||'%5B%5D'));}catch{}
+  const vw=document.getElementById('stat-preview-viewers');
+  vw.innerHTML=viewers.length?viewers.map(v=>`<div class="stat-viewer-row"><span>👁 ${esc(v.username)}</span><span>${v.lastView?fmtDate(v.lastView):''}</span></div>`).join('')
+    :`<div style="color:var(--muted);font-size:13px">${t('stats.no_viewers')}</div>`;
+}
+function closeStatPreview(){document.getElementById('stat-preview-backdrop').classList.remove('open');}
+document.addEventListener('click',e=>{
+  const a=e.target.closest('.stat-photo-link');if(!a)return;
+  e.preventDefault();
+  openStatPreview(a.dataset.pid,a.dataset.viewers,a.textContent);
+});
 
 // ═══ PIN / HIDE / OBSERVERS / EXPORT (v1.0.0) ═══════════════════════
 let pinAlbum=null, hideAlbum=null, obsAlbumsTargetId=null, allObservers=[];
@@ -1570,7 +1626,7 @@ function buildAlbumTile(a){
       if(!b)return;
       const img=document.createElement('img');img.className='at-cover';img.draggable=false;
       img.src=URL.createObjectURL(b);
-      img.onload=()=>big.remove();   // Icon weg, sobald Cover sichtbar
+      img.onload=()=>{big.remove();tile.classList.add('has-cover');};   // Icon weg + Texte ausblenden
       tile.insertBefore(img,tile.firstChild);
     }).catch(()=>{});
   } else {

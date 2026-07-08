@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.6';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -987,11 +987,19 @@ app.get('/api/stats', requireAdmin, (req, res) => {
     totalStorageMB: parseFloat((db.photos.reduce((s, p) => s + (p.size || 0), 0) / 1048576).toFixed(2)),
     appVersion: APP_VERSION
   };
-  const topPhotos = db.photos.filter(p => p.views > 0).sort((a, b) => b.views - a.views).slice(0, 10).map(p => ({
-    id: p.id, name: p.originalName, views: p.views || 0, downloads: p.downloads || 0,
-    uniqueViewers: new Set((p.viewLog || []).map(e => e.userId)).size, shared: p.shared,
-    ownerName: db.users.find(u => u.id === p.ownerId)?.username ?? '?',
-    albumName: db.albums.find(a => a.id === p.albumId)?.name ?? '?', uploadedAt: p.uploadedAt }));
+  const nameOf = id => db.users.find(u => u.id === id)?.username ?? '?';
+  const topPhotos = db.photos.filter(p => p.views > 0).sort((a, b) => b.views - a.views).slice(0, 10).map(p => {
+    // viewers: most-recent-first, de-duplicated by user, with last-view timestamp
+    const seen = new Map();
+    (p.viewLog || []).slice().reverse().forEach(e => { if (!seen.has(e.userId)) seen.set(e.userId, e.ts); });
+    const viewers = [...seen.entries()].map(([id, ts]) => ({ username: nameOf(id), lastView: ts }));
+    return {
+      id: p.id, name: p.originalName, views: p.views || 0, downloads: p.downloads || 0,
+      uniqueViewers: seen.size, shared: p.shared,
+      viewers,
+      ownerName: nameOf(p.ownerId),
+      albumName: db.albums.find(a => a.id === p.albumId)?.name ?? '?', uploadedAt: p.uploadedAt };
+  });
   const topAlbums = db.albums.filter(a => (a.views || 0) > 0).sort((a, b) => b.views - a.views).slice(0, 10).map(a => ({
     id: a.id, name: a.name, views: a.views || 0,
     photoCount: db.photos.filter(p => p.albumId === a.id).length,
