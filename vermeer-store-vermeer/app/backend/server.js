@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.1.0';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -103,6 +103,7 @@ function saveDB(db) {
   fs.renameSync(tmp, DB_FILE);
 }
 function uid() { return crypto.randomBytes(8).toString('hex'); }
+const ID_RE = /^[a-f0-9]{16}$/;   // uid() format – blocks path traversal / injection
 
 function trackPhotoView(db, photoId, userId) {
   const photo = db.photos.find(p => p.id === photoId); if (!photo) return;
@@ -359,6 +360,8 @@ app.post('/api/login', rateLimit(10, 900000), (req, res) => {
     if (user.familyWrappedDEK && user.kdfSalt) {
       try { familyCache.set(req.sessionID, unwrapKey(user.familyWrappedDEK, kdf(password, user.kdfSalt))); } catch {}
     }
+    user.lastLoginAt = Date.now();   // track observer's last visit
+    saveDB(db);
     return res.json({ id: user.id, username: user.username, role: user.role, type: 'observer', mustChangePassword: !!user.mustChangePassword });
   }
 
@@ -574,7 +577,7 @@ app.put('/api/users/:id/album-permissions', requireAdmin, (req, res) => {
 app.get('/api/observers', requireMainUser, (req, res) => {
   const db = loadDB();
   res.json(db.users.filter(u => u.type === 'observer' && u.parentUserId === req.session.userId)
-    .map(u => ({ id: u.id, username: u.username, createdAt: u.createdAt, canViewAlbums: u.canViewAlbums || [], mustChangePassword: !!u.mustChangePassword })));
+    .map(u => ({ id: u.id, username: u.username, createdAt: u.createdAt, canViewAlbums: u.canViewAlbums || [], mustChangePassword: !!u.mustChangePassword, lastLoginAt: u.lastLoginAt || null })));
 });
 app.post('/api/observers', requireMainUser, requireDEK, (req, res) => {
   const { username, password } = req.body;
@@ -658,7 +661,7 @@ app.get('/api/albums', requireAuth, (req, res) => {
       description: locked ? '' : (a.description || ''), createdAt: a.createdAt,
       photoCount: locked ? 0 : db.photos.filter(p => p.albumId === a.id).length,
       coverPhotoId: locked ? null : (a.coverPhotoId || null),
-      hidden: !!a.hidden, effectiveHidden: hid, locked,
+      hidden: !!a.hidden, effectiveHidden: hid, hiddenRootId: hid ? hiddenRootFor(db, a.id) : null, locked,
       canUpload: canUploadToAlbum(db, req.session.userId, a.id),
       canManage: canManageAlbum(db, req.session.userId, a.id)
     };
@@ -711,6 +714,13 @@ app.put('/api/albums/:id/hide', requireAuth, (req, res) => {
     delete album.pinHash;
   }
   saveDB(db); res.json({ success: true, hidden: album.hidden });
+});
+
+app.post('/api/albums/:id/relock', requireAuth, (req, res) => {
+  const db = loadDB();
+  const root = hiddenRootFor(db, req.params.id) || req.params.id;
+  req.session.unlockedAlbums = (req.session.unlockedAlbums || []).filter(id => id !== root);
+  res.json({ success: true });
 });
 
 app.post('/api/albums/:id/unlock', requireAuth, rateLimit(5, 900000), (req, res) => {
@@ -825,18 +835,44 @@ app.get('/api/albums/:albumId/photos', requireAuth, (req, res) => {
 
 app.put('/api/photos/:id/move', requireAuth, (req, res) => {
   const { targetAlbumId } = req.body;
+  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
   const db = loadDB();
   const photo = db.photos.find(p => p.id === req.params.id);
   if (!photo) return res.status(404).json({ error: 'Photo not found' });
   const me = getUser(db, req);
   if (photo.ownerId !== req.session.userId && me.type !== 'admin') return res.status(403).json({ error: 'Not your photo' });
   if (!canUploadToAlbum(db, req.session.userId, targetAlbumId)) return res.status(403).json({ error: 'No upload permission for target album' });
+  const targetAlbum = db.albums.find(a => a.id === targetAlbumId);
+  if (!targetAlbum) return res.status(404).json({ error: 'Target album not found' });
+  // Cannot move into a locked hidden album unless unlocked this session
+  if (effectiveHidden(db, targetAlbumId) && !isUnlocked(req, db, targetAlbumId))
+    return res.status(423).json({ error: 'Target album locked', code: 'LOCKED' });
+
+  const oldAlbumId = photo.albumId;
   photo.albumId = targetAlbumId;
-  if ((albumIsGranted(db, targetAlbumId) || albumIsFamilyGranted(db, targetAlbumId)) && photo.encryption === 'user') photo.reencryptPending = true;
-  saveDB(db); res.json({ success: true });
+
+  // Re-encryption needed if the target's sharing context differs from current encryption
+  const needsShared = albumIsGranted(db, targetAlbumId);
+  const needsFamily = !needsShared && albumIsFamilyGranted(db, targetAlbumId);
+  const targetEnc = needsShared ? 'shared' : (needsFamily ? 'family' : 'user');
+  if (photo.encryption && photo.encryption !== targetEnc && !photo.shared) {
+    photo.reencryptPending = true;  // owner's session migration will convert it
+  }
+  // Clear cover reference if the photo left an album that used it as cover
+  const oldAlbum = db.albums.find(a => a.id === oldAlbumId);
+  if (oldAlbum && oldAlbum.coverPhotoId === photo.id) delete oldAlbum.coverPhotoId;
+
+  saveDB(db);
+
+  // If owner is online, run migration right away so it's not stuck pending
+  const dek = dekCache.get(req.sessionID);
+  const fam = familyCache.get(req.sessionID);
+  if (photo.reencryptPending && dek && photo.ownerId === req.session.userId)
+    setImmediate(() => migrateUserPhotos(req.session.userId, dek, fam));
+
+  res.json({ success: true });
 });
 
-const ID_RE = /^[a-f0-9]{16}$/;   // uid() format – blocks path traversal / injection via :id
 app.get('/api/photos/:id/thumb', requireAuth, (req, res) => {
   if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
   const db = loadDB();
@@ -856,9 +892,6 @@ app.get('/api/photos/:id/thumb', requireAuth, (req, res) => {
   const f = path.join(THUMBS_DIR, `${photo.id}.enc`);
   if (!fs.existsSync(f)) return res.status(404).json({ error: 'Thumbnail missing' });
   try {
-    const tenMinAgo = Date.now() - 600000;
-    const recent = (photo.viewLog || []).find(e => e.userId === req.session.userId && e.ts > tenMinAgo);
-    if (!recent) { trackPhotoView(db, photo.id, req.session.userId); saveDB(db); }
     res.set('Content-Type', 'image/jpeg');
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('Pragma', 'no-cache');
@@ -887,6 +920,12 @@ app.get('/api/photos/:id/full', requireAuth, (req, res) => {
   const f = path.join(PHOTOS_DIR, `${photo.id}.enc`);
   if (!fs.existsSync(f)) return res.status(404).json({ error: 'File not found' });
   try {
+    // View-Tracking: nur Lightbox-Ansichten zählen, eigene Fotos ausgenommen
+    if (photo.ownerId !== req.session.userId) {
+      const tenMinAgo = Date.now() - 600000;
+      const recent = (photo.viewLog || []).find(e => e.userId === req.session.userId && e.ts > tenMinAgo);
+      if (!recent) { trackPhotoView(db, photo.id, req.session.userId); saveDB(db); }
+    }
     res.set('Content-Type', photo.mimeType || 'image/jpeg');
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('X-Content-Type-Options', 'nosniff');

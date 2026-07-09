@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "1.0.6"
+version: "1.1.0"
 tagline: Encrypted photo albums – private by design
 description: >-
   Vermeer stores your photos AES-256 encrypted on your Umbrel.
@@ -24,9 +24,9 @@ description: >-
   Default login: admin / admin (change immediately!)
 
 releaseNotes: >-
-  1.0.6 – Observers no longer receive a recovery code (their main user
-  handles recovery via password reset). The first-login setup screen is
-  simplified accordingly for observer accounts.
+  1.1.0 – New feature: move photos between albums. Select one or more
+  photos and choose a target album; encryption is automatically
+  adjusted if the target has different sharing settings.
 
 developer: Vermeer
 website: https://github.com/cfi700/vermeer-umbrel-app-store

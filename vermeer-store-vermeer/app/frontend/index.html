@@ -542,6 +542,7 @@
           <th data-i18n="users.col.username"></th>
           <th data-i18n="users.col.created"></th>
           <th data-i18n="obs.col.albums"></th>
+          <th data-i18n="obs.col.lastvisit"></th>
           <th data-i18n="users.col.actions"></th>
         </tr></thead>
         <tbody id="observers-tbody"></tbody>
@@ -748,6 +749,20 @@
   </div>
 </div>
 
+<!-- MODAL: Foto verschieben -->
+<div class="modal-backdrop" id="modal-move">
+  <div class="modal modal-lg">
+    <h2 data-i18n="move.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px"><span id="move-count"></span></p>
+    <div class="perm-tree" id="move-album-list"></div>
+    <div id="move-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-move')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" id="move-confirm-btn" onclick="doMoveSelected()" disabled data-i18n="move.confirm"></button>
+    </div>
+  </div>
+</div>
+
 <div id="stat-preview-backdrop" onclick="if(event.target===this)closeStatPreview()">
   <div class="stat-preview-card">
     <div class="stat-preview-title" id="stat-preview-title"></div>
@@ -863,11 +878,16 @@ const T = {
     'photo.pending':'Wartet auf Freigabe durch Besitzer',
     'btn.refresh':'↺ Aktualisieren',
     'stats.version':'App-Version',
-    'cover.set_btn':'🖼 Als Cover','cover.set':'Album-Cover gesetzt','cover.removed':'Album-Cover entfernt',
+    'cover.set_btn':'🖼 Als Cover','selection.move':'📁 Verschieben',
+    'move.title':'Fotos verschieben','move.confirm':'Hierher verschieben',
+    'move.count':(n)=>`${n} Foto${n!==1?'s':''} ausgewählt – Zielalbum wählen:`,
+    'move.no_targets':'Keine passenden Zielalben vorhanden.',
+    'move.done':(n)=>`${n} Foto${n!==1?'s':''} verschoben`,'move.failed':'fehlgeschlagen',
+    'move.all_failed':'Verschieben fehlgeschlagen','cover.set':'Album-Cover gesetzt','cover.removed':'Album-Cover entfernt',
     'nav.observers':'Beobachter',
     'obs.title':'Meine Beobachter','obs.new':'+ Neuer Beobachter',
     'obs.desc':'Beobachter können ausgewählte Alben von dir ansehen – kein Upload, kein Download, kein Teilen.',
-    'obs.col.albums':'Freigegebene Alben','obs.new_title':'Neuen Beobachter anlegen',
+    'obs.col.albums':'Freigegebene Alben','obs.col.lastvisit':'Letzter Besuch','obs.never':'Noch nie','obs.new_title':'Neuen Beobachter anlegen',
     'obs.new_info':'Der Beobachter muss beim ersten Login ein eigenes Passwort setzen. Danach kann er die von dir freigegebenen Alben ansehen.',
     'obs.albums_title':'Alben freigeben','obs.albums_desc':'darf folgende deiner Alben ansehen:',
     'obs.created':'Beobachter angelegt','obs.deleted':'Beobachter gelöscht',
@@ -987,11 +1007,16 @@ const T = {
     'photo.pending':'Awaiting re-encryption by owner',
     'btn.refresh':'↺ Refresh',
     'stats.version':'App Version',
-    'cover.set_btn':'🖼 Set as cover','cover.set':'Album cover set','cover.removed':'Album cover removed',
+    'cover.set_btn':'🖼 Set as cover','selection.move':'📁 Move',
+    'move.title':'Move Photos','move.confirm':'Move here',
+    'move.count':(n)=>`${n} photo${n!==1?'s':''} selected – choose target album:`,
+    'move.no_targets':'No suitable target albums available.',
+    'move.done':(n)=>`${n} photo${n!==1?'s':''} moved`,'move.failed':'failed',
+    'move.all_failed':'Move failed','cover.set':'Album cover set','cover.removed':'Album cover removed',
     'nav.observers':'Observers',
     'obs.title':'My Observers','obs.new':'+ New Observer',
     'obs.desc':'Observers can view selected albums of yours – no upload, no download, no sharing.',
-    'obs.col.albums':'Granted Albums','obs.new_title':'Create New Observer',
+    'obs.col.albums':'Granted Albums','obs.col.lastvisit':'Last Visit','obs.never':'Never','obs.new_title':'Create New Observer',
     'obs.new_info':'The observer must set their own password at first login. Afterwards they can view the albums you grant.',
     'obs.albums_title':'Grant Albums','obs.albums_desc':'may view these albums of yours:',
     'obs.created':'Observer created','obs.deleted':'Observer deleted',
@@ -1282,7 +1307,7 @@ function renderStats(s, wrap) {
     [t('stats.photo'), t('stats.album'), t('stats.owner'), t('stats.views'), t('stats.viewers'), t('stats.downloads'), ''],
     (p, i, maxV) => `
       <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
-      <td>${esc(p.name)}${p.shared?` <span class="shared-dot"></span>`:''}  </td>
+      <td><span class="stat-photo-link" data-pid="${p.id}" data-viewers="${encodeURIComponent(JSON.stringify(p.viewers||[]))}">${esc(p.name)}</span></td>
       <td style="color:var(--muted);font-size:12px">${esc(p.albumName)}</td>
       <td style="color:var(--muted);font-size:12px">${esc(p.ownerName)}</td>
       <td><strong>${p.views}</strong></td>
@@ -1443,11 +1468,12 @@ async function loadObservers(){
       <td>${fmtDate(o.createdAt)}</td>
       <td><span style="font-size:12px;color:var(--muted)">${t('obs.albums_count',(o.canViewAlbums||[]).length)}</span>
         <button class="btn btn-ghost btn-xs" style="margin-left:8px" data-act="obsalbum" data-id="${o.id}">${t('users.album_rights')}</button></td>
+      <td style="font-size:12px;color:var(--muted)">${o.lastLoginAt?fmtDateTime(o.lastLoginAt):t('obs.never')}</td>
       <td><div class="td-actions">
         <button class="btn btn-ghost btn-sm" data-act="obsreset" data-id="${o.id}">${t('users.reset_pw')}</button>
         <button class="btn btn-danger btn-sm" data-act="obsdel" data-id="${o.id}">${t('users.delete')}</button>
       </div></td>
-    </tr>`).join('')||`<tr><td colspan="4" style="color:var(--muted);text-align:center">–</td></tr>`;
+    </tr>`).join('')||`<tr><td colspan="5" style="color:var(--muted);text-align:center">–</td></tr>`;
 }
 function openNewObserverModal(){['no-name','no-pass'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-new-observer').classList.add('open');}
 async function createObserver(){
@@ -1521,12 +1547,32 @@ async function loadAlbums(){
   loadAlbumContent(currentAlbumId);
 }
 function albumChildren(pid){return allAlbums.filter(a=>a.parentId===pid);}
-function selectAlbum(id){
+async function relockIfLeavingHidden(targetId){
+  // Wenn das aktuelle Album (oder sein hidden-Root) verlassen wird → Server-Unlock aufheben
+  if(!currentAlbumId)return;
+  const cur=allAlbums.find(x=>x.id===currentAlbumId);
+  if(!cur||!cur.effectiveHidden)return;
+  const curRoot=cur.hiddenRootId||currentAlbumId;
+  const tgt=targetId?allAlbums.find(x=>x.id===targetId):null;
+  const tgtRoot=(tgt&&tgt.effectiveHidden)?(tgt.hiddenRootId||targetId):null;
+  if(curRoot!==tgtRoot){
+    try{await fetch(`/api/albums/${curRoot}/relock`,{method:'POST'});}catch{}
+  }
+}
+async function selectAlbum(id){
   const a=allAlbums.find(x=>x.id===id);
   if(a&&a.locked){openPinModal(a);return;}
-  currentAlbumId=id;selectedPhotos.clear();loadAlbumContent(id);
+  await relockIfLeavingHidden(id);
+  currentAlbumId=id;selectedPhotos.clear();
+  await loadAlbums();               // frischer locked-Status nach evtl. relock
+  loadAlbumContent(id);
 }
-function goHome(){currentAlbumId=null;selectedPhotos.clear();loadAlbumContent(null);}
+async function goHome(){
+  await relockIfLeavingHidden(null);
+  currentAlbumId=null;selectedPhotos.clear();
+  await loadAlbums();
+  loadAlbumContent(null);
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // ALBUM CONTENT
@@ -1584,6 +1630,7 @@ async function loadAlbumContent(albumId){
       <button class="btn btn-ghost btn-sm" onclick="toggleSelectAll()" id="btn-sel-all">${t('selection.select_all')}</button>
       <button class="btn btn-ghost btn-sm" onclick="downloadSelected()" id="btn-dl" style="display:none">${t('selection.download')}</button>
       <button class="btn btn-ghost btn-sm" onclick="setCoverSelected()" id="btn-cover" style="display:none">${t('cover.set_btn')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="openMoveModal()" id="btn-move" style="display:none">${t('selection.move')}</button>
       <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btn-del-sel" style="display:none">${t('selection.delete')}</button>`;
     content.appendChild(selBar);
   }
@@ -1775,16 +1822,27 @@ function toggleSelectAll(){
 
 function updateSelectionBar(){
   const bar=document.getElementById('selection-bar');
+  if(!bar)return;
+  const n=selectedPhotos.size;
+  const selPhotos=currentPhotos.filter(p=>selectedPhotos.has(p.id));
   const count=document.getElementById('sel-count');
   const btnAll=document.getElementById('btn-sel-all');
   const btnDl=document.getElementById('btn-dl');
   const btnDel=document.getElementById('btn-del-sel');
+  bar.classList.toggle('visible',n>0);
+  if(count)count.textContent=t('selection.count',n);
+  // Download: only if all selected are downloadable (own photos)
+  if(btnDl)btnDl.style.display=(n>0&&selPhotos.every(p=>p.canDownload))?'':'none';
   // Delete: only own or admin
   const canDel=n>0&&selPhotos.every(p=>p.ownerId===me.id||me.role==='admin');
   if(btnDel)btnDel.style.display=canDel?'':'none';
   // Cover: exactly one photo selected + album manageable
   const btnCover=document.getElementById('btn-cover');
   if(btnCover)btnCover.style.display=(n===1&&currentAlbumCanManage)?'':'none';
+  // Move: at least one own photo (or admin) selected
+  const btnMove=document.getElementById('btn-move');
+  const canMove=n>0&&selPhotos.every(p=>p.ownerId===me.id||me.role==='admin');
+  if(btnMove)btnMove.style.display=canMove?'':'none';
 }
 
 async function downloadSelected(){
@@ -1803,6 +1861,54 @@ async function setCoverSelected(){
   const r=await api('PUT',`/api/albums/${currentAlbumId}/cover`,{photoId});
   if(r.ok){toast(t('cover.set'),'success');selectedPhotos.clear();await loadAlbums();}
   else toast((await r.json()).error,'error');
+}
+
+let moveTargetId=null;
+function openMoveModal(){
+  if(selectedPhotos.size===0)return;
+  moveTargetId=null;
+  document.getElementById('move-count').textContent=t('move.count',selectedPhotos.size);
+  document.getElementById('move-err').style.display='none';
+  document.getElementById('move-confirm-btn').disabled=true;
+  // Zielalben: alle, in die ich hochladen darf, außer dem aktuellen Album
+  const targets=allAlbums.filter(a=>a.canUpload&&a.id!==currentAlbumId&&a.id!=='__shared__');
+  const list=document.getElementById('move-album-list');
+  if(!targets.length){
+    list.innerHTML=`<div style="padding:12px;color:var(--muted);font-size:13px">${t('move.no_targets')}</div>`;
+  } else {
+    list.innerHTML=targets.map(a=>{
+      const indent=albumDepth(a)*16;
+      return `<label class="perm-album-item" style="padding-left:${8+indent}px">
+        <input type="radio" name="move-target" value="${a.id}">
+        <span>${a.effectiveHidden?'🕶 ':''}${esc(a.name)}</span>
+        <span style="color:var(--muted);font-size:11px;margin-left:6px">${t('albums.photos_count',a.photoCount)}</span>
+      </label>`;
+    }).join('');
+    list.querySelectorAll('input[name="move-target"]').forEach(r=>r.addEventListener('change',e=>{
+      moveTargetId=e.target.value;
+      document.getElementById('move-confirm-btn').disabled=false;
+    }));
+  }
+  document.getElementById('modal-move').classList.add('open');
+}
+function albumDepth(a){let d=0,cur=a;while(cur&&cur.parentId){d++;cur=allAlbums.find(x=>x.id===cur.parentId);}return d;}
+async function doMoveSelected(){
+  if(!moveTargetId||selectedPhotos.size===0)return;
+  const errEl=document.getElementById('move-err');errEl.style.display='none';
+  const ids=[...selectedPhotos];
+  let moved=0,failed=0;
+  for(const id of ids){
+    const p=currentPhotos.find(x=>x.id===id);
+    if(p&&!(p.ownerId===me.id||me.role==='admin')){failed++;continue;}
+    const r=await api('PUT',`/api/photos/${id}/move`,{targetAlbumId:moveTargetId});
+    if(r.ok)moved++;else failed++;
+  }
+  closeModal('modal-move');
+  selectedPhotos.clear();
+  if(moved)toast(t('move.done',moved)+(failed?` (${failed} ${t('move.failed')})`:''),failed?'error':'success');
+  else toast(t('move.all_failed'),'error');
+  await loadAlbums();
+  if(currentAlbumId)loadAlbumContent(currentAlbumId);
 }
 
 async function deleteSelected(){
@@ -2149,6 +2255,7 @@ function api(method,url,body){return fetch(url,{method,headers:{'Content-Type':'
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 function toast(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className=`show ${type}`;clearTimeout(toast._t);toast._t=setTimeout(()=>el.className='',3000);}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;');}
+function fmtDateTime(ts){if(!ts)return'';const d=new Date(ts);return d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});}
 function fmtDate(ts){return new Date(ts).toLocaleDateString(lang==='de'?'de-DE':'en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});}
 
 // ═══════════════════════════════════════════════════════════════════
