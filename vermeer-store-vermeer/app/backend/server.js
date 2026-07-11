@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.2';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -881,7 +881,9 @@ app.get('/api/photos/:id/thumb', requireAuth, (req, res) => {
   const me = getUser(db, req);
   const canView = (photo.shared && me.type !== 'observer') || canViewAlbum(db, req.session.userId, photo.albumId);
   if (!canView) return res.status(403).json({ error: 'No access' });
-  if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId))
+  // Hidden albums: admins with a fresh stats password re-auth may preview them
+  const statsBypass = me.type === 'admin' && statsUnlocked(req);
+  if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId) && !statsBypass)
     return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
   const referer = req.headers['referer'] || req.headers['origin'] || '';
   const host = req.headers['host'] || '';
@@ -1016,7 +1018,23 @@ app.get('/api/export', requireAuth, requireDEK, (req, res) => {
 });
 
 // ═══ STATISTICS (Admin) ═══════════════════════════════════════════
+const STATS_UNLOCK_TTL = 15 * 60 * 1000;   // re-auth valid for 15 minutes
+function statsUnlocked(req) {
+  return req.session.statsUnlockedAt && (Date.now() - req.session.statsUnlockedAt) < STATS_UNLOCK_TTL;
+}
+app.post('/api/stats/unlock', requireAdmin, rateLimit(5, 900000), (req, res) => {
+  const { password } = req.body;
+  const db = loadDB();
+  const me = getUser(db, req);
+  if (!password || !bcrypt.compareSync(password, me.passwordHash))
+    return res.status(401).json({ error: 'Wrong password' });
+  req.session.statsUnlockedAt = Date.now();
+  res.json({ success: true });
+});
+
 app.get('/api/stats', requireAdmin, (req, res) => {
+  if (!statsUnlocked(req))
+    return res.status(401).json({ error: 'Password confirmation required', code: 'STATS_LOCKED' });
   const db = loadDB();
   const overview = {
     totalPhotos: db.photos.length, totalAlbums: db.albums.length, totalUsers: db.users.length,

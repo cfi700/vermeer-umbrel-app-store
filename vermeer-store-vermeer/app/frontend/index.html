@@ -749,6 +749,20 @@
   </div>
 </div>
 
+<!-- MODAL: Statistik-Passwortabfrage -->
+<div class="modal-backdrop" id="modal-stats-pw">
+  <div class="modal" style="width:360px">
+    <h2 data-i18n="statspw.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px" data-i18n="statspw.desc"></p>
+    <div class="form-group"><label data-i18n="account.current_pw"></label><input type="password" id="stats-pw-input" autocomplete="current-password"></div>
+    <div id="stats-pw-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-stats-pw');showPage('albums')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" onclick="doStatsUnlock()" data-i18n="statspw.confirm"></button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Foto verschieben -->
 <div class="modal-backdrop" id="modal-move">
   <div class="modal modal-lg">
@@ -851,7 +865,9 @@ const T = {
     'stats.total_users':'Benutzer','stats.total_views':'Aufrufe gesamt',
     'stats.total_downloads':'Downloads','stats.storage_mb':'Speicher (MB)',
     'stats.no_data':'Noch keine Daten vorhanden',
-    'stats.viewers':'Betrachter','stats.viewers_list':'Wer hat es angesehen','stats.no_viewers':'Noch niemand',
+    'stats.viewers':'Betrachter',
+    'statspw.title':'Statistik entsperren','statspw.confirm':'Entsperren',
+    'statspw.desc':'Bitte bestätige dein Passwort, um die Statistik zu öffnen. Damit werden in der Vorschau auch Fotos aus versteckten Alben angezeigt.','stats.viewers_list':'Wer hat es angesehen','stats.no_viewers':'Noch niemand',
     'login.forgot':'Passwort vergessen? Mit Recovery-Code wiederherstellen',
     'setup.title':'Neues Passwort festlegen',
     'setup.desc':'Bei der ersten Anmeldung musst du ein eigenes Passwort vergeben. Es dient zugleich als Schlüssel für die Verschlüsselung deiner Fotos.',
@@ -980,7 +996,9 @@ const T = {
     'stats.total_users':'Users','stats.total_views':'Total Views',
     'stats.total_downloads':'Downloads','stats.storage_mb':'Storage (MB)',
     'stats.no_data':'No data available yet',
-    'stats.viewers':'Viewers','stats.viewers_list':'Who viewed it','stats.no_viewers':'Nobody yet',
+    'stats.viewers':'Viewers',
+    'statspw.title':'Unlock Statistics','statspw.confirm':'Unlock',
+    'statspw.desc':'Please confirm your password to open statistics. This also enables previews of photos from hidden albums.','stats.viewers_list':'Who viewed it','stats.no_viewers':'Nobody yet',
     'login.forgot':'Forgot password? Restore with recovery code',
     'setup.title':'Set Your New Password',
     'setup.desc':'On first login you must choose your own password. It also serves as the encryption key for your photos.',
@@ -1241,10 +1259,31 @@ async function loadStats() {
   wrap.innerHTML = `<div class="empty-state"><div class="e-icon">⏳</div><p>${t('loading')}</p></div>`;
   try {
     const r = await fetch('/api/stats');
+    if (r.status === 401) {
+      const data = await r.json().catch(()=>({}));
+      if (data.code === 'STATS_LOCKED') {
+        wrap.innerHTML = `<div class="empty-state"><div class="e-icon">🔐</div><p>${t('statspw.desc')}</p></div>`;
+        document.getElementById('stats-pw-input').value='';
+        document.getElementById('stats-pw-err').style.display='none';
+        document.getElementById('modal-stats-pw').classList.add('open');
+        setTimeout(()=>document.getElementById('stats-pw-input').focus(),60);
+        return;
+      }
+    }
     if (!r.ok) { wrap.innerHTML = `<div class="empty-state"><p>${t('error')}</p></div>`; return; }
     const s = await r.json();
     renderStats(s, wrap);
   } catch { wrap.innerHTML = `<div class="empty-state"><p>${t('error')}</p></div>`; }
+}
+
+async function doStatsUnlock(){
+  const pw=document.getElementById('stats-pw-input').value;
+  const errEl=document.getElementById('stats-pw-err');errEl.style.display='none';
+  const r=await api('POST','/api/stats/unlock',{password:pw});
+  const data=await r.json();
+  if(!r.ok){errEl.textContent=data.error||t('error');errEl.style.display='block';return;}
+  closeModal('modal-stats-pw');
+  loadStats();
 }
 
 function renderStats(s, wrap) {
@@ -1415,7 +1454,8 @@ async function doUnlockAlbum(){
   closeModal('modal-pin');
   toast(t('pin.unlocked'),'success');
   const id=pinAlbum.id;pinAlbum=null;
-  await loadAlbums();
+  const a=allAlbums.find(x=>x.id===id);
+  if(a)a.locked=false;   // lokal entsperren – selectAlbum lädt danach ohnehin frisch
   selectAlbum(id);
 }
 function openHideModal(album){
@@ -1564,14 +1604,12 @@ async function selectAlbum(id){
   if(a&&a.locked){openPinModal(a);return;}
   await relockIfLeavingHidden(id);
   currentAlbumId=id;selectedPhotos.clear();
-  await loadAlbums();               // frischer locked-Status nach evtl. relock
-  loadAlbumContent(id);
+  await loadAlbums();   // rendert bereits loadAlbumContent(currentAlbumId) – kein Doppel-Render
 }
 async function goHome(){
   await relockIfLeavingHidden(null);
   currentAlbumId=null;selectedPhotos.clear();
   await loadAlbums();
-  loadAlbumContent(null);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1718,11 +1756,16 @@ function buildBreadcrumb(albumId){
   return crumbs;
 }
 
+let photosLoadToken=0;
 async function loadPhotos(albumId,wrap){
+  const myToken=++photosLoadToken;   // jüngster Ladevorgang gewinnt
   try{
     const r=await fetch(`/api/albums/${albumId}/photos`);
+    if(myToken!==photosLoadToken)return;   // veraltete Antwort (Album wurde gewechselt) → verwerfen
     if(r.status===423){wrap.innerHTML=`<div class="empty-state"><div class="e-icon">🔒</div><p>${t('album.locked_toast')}</p></div>`;return;}
-    currentPhotos=await r.json();
+    const list=await r.json();
+    if(myToken!==photosLoadToken)return;
+    currentPhotos=list;
     if(!currentPhotos.length){wrap.innerHTML=`<div class="empty-state"><div class="e-icon">📷</div><p>${t('albums.empty')}</p></div>`;return;}
     wrap.innerHTML='<div class="photo-grid" id="photo-grid"></div>';
     const grid=document.getElementById('photo-grid');
@@ -1766,7 +1809,8 @@ async function loadPhotos(albumId,wrap){
 
       card.appendChild(imgWrap);
 
-      // ── Info ──
+      // ── Info (Beobachter sehen nur das Bild – kein Name, kein Datum) ──
+      if(me&&me.type==='observer'){grid.appendChild(card);loadThumb(p.id,i);return;}
       const info=document.createElement('div');
       info.className='photo-info';
       const nameEl=document.createElement('div');
@@ -1995,7 +2039,7 @@ function openLightbox(idx){
 
 function renderLightbox(){
   const p=lbPhotos[lbIndex];if(!p)return;
-  document.getElementById('lb-title').textContent=p.originalName;
+  document.getElementById('lb-title').textContent=(me&&me.type==='observer')?'':p.originalName;
   document.getElementById('lb-counter').textContent=`${lbIndex+1} / ${lbPhotos.length}`;
   document.getElementById('lb-prev').disabled=lbIndex===0;
   document.getElementById('lb-next').disabled=lbIndex===lbPhotos.length-1;
@@ -2349,6 +2393,11 @@ function fmtDate(ts){return new Date(ts).toLocaleDateString(lang==='de'?'de-DE':
   const el=document.getElementById(id);
   if(el)el.addEventListener('click',e=>{if(e.target===el)closeModal(id);});
 });
+// Enter key submits stats password modal
+(function(){
+  const sp=document.getElementById('stats-pw-input');
+  if(sp)sp.addEventListener('keydown',e=>{if(e.key==='Enter')doStatsUnlock();});
+})();
 // Enter key submits album modal
 (function(){
   const an=document.getElementById('album-name');
