@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '1.2.0';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -882,7 +882,7 @@ app.get('/api/photos/:id/thumb', requireAuth, (req, res) => {
   const canView = (photo.shared && me.type !== 'observer') || canViewAlbum(db, req.session.userId, photo.albumId);
   if (!canView) return res.status(403).json({ error: 'No access' });
   // Hidden albums: admins with a fresh stats password re-auth may preview them
-  const statsBypass = me.type === 'admin' && statsUnlocked(req);
+  const statsBypass = statsUnlocked(req) && (me.type === 'admin' || photo.ownerId === me.id);
   if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId) && !statsBypass)
     return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
   const referer = req.headers['referer'] || req.headers['origin'] || '';
@@ -1022,7 +1022,7 @@ const STATS_UNLOCK_TTL = 15 * 60 * 1000;   // re-auth valid for 15 minutes
 function statsUnlocked(req) {
   return req.session.statsUnlockedAt && (Date.now() - req.session.statsUnlockedAt) < STATS_UNLOCK_TTL;
 }
-app.post('/api/stats/unlock', requireAdmin, rateLimit(5, 900000), (req, res) => {
+app.post('/api/stats/unlock', requireMainUser, rateLimit(5, 900000), (req, res) => {
   const { password } = req.body;
   const db = loadDB();
   const me = getUser(db, req);
@@ -1032,12 +1032,22 @@ app.post('/api/stats/unlock', requireAdmin, rateLimit(5, 900000), (req, res) => 
   res.json({ success: true });
 });
 
-app.get('/api/stats', requireAdmin, (req, res) => {
+app.get('/api/stats', requireMainUser, (req, res) => {
   if (!statsUnlocked(req))
     return res.status(401).json({ error: 'Password confirmation required', code: 'STATS_LOCKED' });
-  const db = loadDB();
+  const fullDb = loadDB();
+  const meU = getUser(fullDb, req);
+  const isAdmin = meU.type === 'admin';
+  // Scope: main users see only their own photos/albums; admin sees everything
+  const db = isAdmin ? fullDb : {
+    users: fullDb.users,
+    albums: fullDb.albums.filter(a => a.ownerId === meU.id),
+    photos: fullDb.photos.filter(p => p.ownerId === meU.id)
+  };
   const overview = {
-    totalPhotos: db.photos.length, totalAlbums: db.albums.length, totalUsers: db.users.length,
+    totalPhotos: db.photos.length, totalAlbums: db.albums.length,
+    totalUsers: isAdmin ? fullDb.users.length : (fullDb.users.filter(u => u.parentUserId === meU.id).length + 1),
+    scope: isAdmin ? 'all' : 'own',
     totalViews: db.photos.reduce((s, p) => s + (p.views || 0), 0),
     totalDownloads: db.photos.reduce((s, p) => s + (p.downloads || 0), 0),
     sharedPhotos: db.photos.filter(p => p.shared).length,
@@ -1075,6 +1085,24 @@ app.get('/api/stats', requireAdmin, (req, res) => {
   db.photos.forEach(p => (p.viewLog || []).forEach(e => { if (e.ts >= cutoff) { const d = new Date(e.ts).toISOString().slice(0, 10); vbd[d] = (vbd[d] || 0) + 1; } }));
   const viewsTimeline = Object.entries(vbd).sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ date, count }));
   res.json({ overview, topPhotos, topAlbums, topViewers, topUploaders, viewsTimeline });
+});
+
+// Reset statistics: main users reset their own data, admin resets everything
+app.post('/api/stats/reset', requireMainUser, (req, res) => {
+  if (!statsUnlocked(req))
+    return res.status(401).json({ error: 'Password confirmation required', code: 'STATS_LOCKED' });
+  const db = loadDB();
+  const me = getUser(db, req);
+  const isAdmin = me.type === 'admin';
+  let photos = 0, albums = 0;
+  db.photos.forEach(p => {
+    if (isAdmin || p.ownerId === me.id) { p.views = 0; p.downloads = 0; p.viewLog = []; photos++; }
+  });
+  db.albums.forEach(a => {
+    if (isAdmin || a.ownerId === me.id) { a.views = 0; albums++; }
+  });
+  saveDB(db);
+  res.json({ success: true, photos, albums, scope: isAdmin ? 'all' : 'own' });
 });
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: APP_VERSION }));

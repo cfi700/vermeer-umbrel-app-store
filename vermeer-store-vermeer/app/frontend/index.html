@@ -586,6 +586,7 @@
     <div class="page-header">
       <h2 class="page-title" data-i18n="stats.title"></h2>
       <button class="btn btn-ghost btn-sm" onclick="loadStats()" data-i18n="btn.refresh"></button>
+      <button class="btn btn-danger btn-sm" onclick="resetStats()" data-i18n="stats.reset_btn"></button>
     </div>
     <div id="stats-content">
       <div class="empty-state"><div class="e-icon">⏳</div><p data-i18n="loading"></p></div>
@@ -866,7 +867,10 @@ const T = {
     'stats.total_downloads':'Downloads','stats.storage_mb':'Speicher (MB)',
     'stats.no_data':'Noch keine Daten vorhanden',
     'stats.viewers':'Betrachter',
-    'statspw.title':'Statistik entsperren','statspw.confirm':'Entsperren',
+    'statspw.title':'Statistik entsperren','stats.reset_btn':'🗑 Zurücksetzen',
+    'stats.reset_confirm_own':'Deine gesamte Statistik (Aufrufe, Betrachter, Downloads deiner Fotos) wirklich zurücksetzen? Dies kann nicht rückgängig gemacht werden.',
+    'stats.reset_confirm_all':'ACHTUNG: Als Admin setzt du die Statistik ALLER Benutzer zurück. Wirklich fortfahren?',
+    'stats.reset_done':(n)=>`Statistik zurückgesetzt (${n} Foto${n!==1?'s':''})`,'statspw.confirm':'Entsperren',
     'statspw.desc':'Bitte bestätige dein Passwort, um die Statistik zu öffnen. Damit werden in der Vorschau auch Fotos aus versteckten Alben angezeigt.','stats.viewers_list':'Wer hat es angesehen','stats.no_viewers':'Noch niemand',
     'login.forgot':'Passwort vergessen? Mit Recovery-Code wiederherstellen',
     'setup.title':'Neues Passwort festlegen',
@@ -997,7 +1001,10 @@ const T = {
     'stats.total_downloads':'Downloads','stats.storage_mb':'Storage (MB)',
     'stats.no_data':'No data available yet',
     'stats.viewers':'Viewers',
-    'statspw.title':'Unlock Statistics','statspw.confirm':'Unlock',
+    'statspw.title':'Unlock Statistics','stats.reset_btn':'🗑 Reset',
+    'stats.reset_confirm_own':'Really reset your entire statistics (views, viewers, downloads of your photos)? This cannot be undone.',
+    'stats.reset_confirm_all':'WARNING: As admin you will reset the statistics of ALL users. Continue?',
+    'stats.reset_done':(n)=>`Statistics reset (${n} photo${n!==1?'s':''})`,'statspw.confirm':'Unlock',
     'statspw.desc':'Please confirm your password to open statistics. This also enables previews of photos from hidden albums.','stats.viewers_list':'Who viewed it','stats.no_viewers':'Nobody yet',
     'login.forgot':'Forgot password? Restore with recovery code',
     'setup.title':'Set Your New Password',
@@ -1227,6 +1234,8 @@ function bootApp(){
   if(me.type==='admin'){
     document.getElementById('admin-pill').style.display='inline-block';
     document.getElementById('nav-users').style.display='inline-block';
+  }
+  if(me.type==='admin'||me.type==='user'){
     document.getElementById('nav-stats').style.display='inline-block';
   }
   if(me.type==='user'||me.type==='admin'){
@@ -1283,6 +1292,19 @@ async function doStatsUnlock(){
   const data=await r.json();
   if(!r.ok){errEl.textContent=data.error||t('error');errEl.style.display='block';return;}
   closeModal('modal-stats-pw');
+  loadStats();
+}
+
+async function resetStats(){
+  const isAdmin=me&&me.type==='admin';
+  if(!confirm(isAdmin?t('stats.reset_confirm_all'):t('stats.reset_confirm_own')))return;
+  const r=await api('POST','/api/stats/reset',{});
+  const data=await r.json();
+  if(!r.ok){
+    if(data.code==='STATS_LOCKED'){loadStats();return;}  // Reauth abgelaufen → PW-Dialog
+    toast(data.error||t('error'),'error');return;
+  }
+  toast(t('stats.reset_done',data.photos),'success');
   loadStats();
 }
 
