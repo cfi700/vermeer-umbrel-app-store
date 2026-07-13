@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -1094,15 +1094,17 @@ app.post('/api/stats/reset', requireMainUser, (req, res) => {
   const db = loadDB();
   const me = getUser(db, req);
   const isAdmin = me.type === 'admin';
+  // scope: 'own' = only my photos; 'all' = everything (admin only)
+  const scope = (isAdmin && req.body.scope === 'all') ? 'all' : 'own';
   let photos = 0, albums = 0;
   db.photos.forEach(p => {
-    if (isAdmin || p.ownerId === me.id) { p.views = 0; p.downloads = 0; p.viewLog = []; photos++; }
+    if (scope === 'all' || p.ownerId === me.id) { p.views = 0; p.downloads = 0; p.viewLog = []; photos++; }
   });
   db.albums.forEach(a => {
-    if (isAdmin || a.ownerId === me.id) { a.views = 0; albums++; }
+    if (scope === 'all' || a.ownerId === me.id) { a.views = 0; albums++; }
   });
   saveDB(db);
-  res.json({ success: true, photos, albums, scope: isAdmin ? 'all' : 'own' });
+  res.json({ success: true, photos, albums, scope });
 });
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: APP_VERSION }));

@@ -750,6 +750,21 @@
   </div>
 </div>
 
+<!-- MODAL: Reset-Auswahl (Admin) -->
+<div class="modal-backdrop" id="modal-reset-choice">
+  <div class="modal" style="width:380px">
+    <h2 data-i18n="stats.reset_choice_title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px" data-i18n="stats.reset_choice_desc"></p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-ghost" onclick="resetStats('own')" data-i18n="stats.reset_own_btn"></button>
+      <button class="btn btn-danger" onclick="resetStats('all')" data-i18n="stats.reset_all_btn"></button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-reset-choice')" data-i18n="btn.cancel"></button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Statistik-Passwortabfrage -->
 <div class="modal-backdrop" id="modal-stats-pw">
   <div class="modal" style="width:360px">
@@ -868,6 +883,8 @@ const T = {
     'stats.no_data':'Noch keine Daten vorhanden',
     'stats.viewers':'Betrachter',
     'statspw.title':'Statistik entsperren','stats.reset_btn':'🗑 Zurücksetzen',
+    'stats.reset_choice_title':'Statistik zurücksetzen','stats.reset_choice_desc':'Welche Statistik möchtest du zurücksetzen?',
+    'stats.reset_own_btn':'Nur mein eigenes Profil','stats.reset_all_btn':'🗑 Alle Benutzer (gesamt)',
     'stats.reset_confirm_own':'Deine gesamte Statistik (Aufrufe, Betrachter, Downloads deiner Fotos) wirklich zurücksetzen? Dies kann nicht rückgängig gemacht werden.',
     'stats.reset_confirm_all':'ACHTUNG: Als Admin setzt du die Statistik ALLER Benutzer zurück. Wirklich fortfahren?',
     'stats.reset_done':(n)=>`Statistik zurückgesetzt (${n} Foto${n!==1?'s':''})`,'statspw.confirm':'Entsperren',
@@ -1002,6 +1019,8 @@ const T = {
     'stats.no_data':'No data available yet',
     'stats.viewers':'Viewers',
     'statspw.title':'Unlock Statistics','stats.reset_btn':'🗑 Reset',
+    'stats.reset_choice_title':'Reset Statistics','stats.reset_choice_desc':'Which statistics do you want to reset?',
+    'stats.reset_own_btn':'Only my own profile','stats.reset_all_btn':'🗑 All users (global)',
     'stats.reset_confirm_own':'Really reset your entire statistics (views, viewers, downloads of your photos)? This cannot be undone.',
     'stats.reset_confirm_all':'WARNING: As admin you will reset the statistics of ALL users. Continue?',
     'stats.reset_done':(n)=>`Statistics reset (${n} photo${n!==1?'s':''})`,'statspw.confirm':'Unlock',
@@ -1228,6 +1247,41 @@ async function checkSession(){
     bootApp();
   }catch{}
 }
+// ── Auto-Logout ──────────────────────────────────────────────
+let idleTimer=null;
+const IDLE_MS=10*60*1000;   // 10 Minuten Inaktivität
+function resetIdleTimer(){
+  if(!me)return;
+  clearTimeout(idleTimer);
+  idleTimer=setTimeout(()=>{autoLogout('idle');},IDLE_MS);
+}
+function autoLogout(reason){
+  try{navigator.sendBeacon?navigator.sendBeacon('/api/logout'):fetch('/api/logout',{method:'POST',keepalive:true});}catch{}
+  if(reason==='idle'){location.reload();}
+}
+let autoLogoutReady=false;
+function setupAutoLogout(){
+  if(autoLogoutReady){resetIdleTimer();return;}
+  autoLogoutReady=true;
+  ['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(ev=>
+    document.addEventListener(ev,resetIdleTimer,{passive:true}));
+  // Tab wird geschlossen oder Seite verlassen → Session serverseitig beenden
+  window.addEventListener('pagehide',()=>{if(me)autoLogout('unload');});
+  // Tab-Wechsel: beim Verstecken einen Timer starten, bei Rückkehr abbrechen
+  let hideLogoutTimer=null;
+  document.addEventListener('visibilitychange',()=>{
+    if(!me)return;
+    if(document.visibilityState==='hidden'){
+      // kurze Karenz (z.B. 8s), damit schneller App-Wechsel am Handy nicht sofort ausloggt
+      hideLogoutTimer=setTimeout(()=>{autoLogout('hidden');location.reload();},8000);
+    } else {
+      clearTimeout(hideLogoutTimer);
+      resetIdleTimer();
+    }
+  });
+  resetIdleTimer();
+}
+
 function bootApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
@@ -1245,6 +1299,7 @@ function bootApp(){
     const ec=document.getElementById('export-card');if(ec)ec.style.display='none';
   }
   applyTranslations();loadAlbums();
+  setupAutoLogout();
 }
 
 // ── NAVIGATION ──────────────────────────────────────────────────────
@@ -1295,15 +1350,20 @@ async function doStatsUnlock(){
   loadStats();
 }
 
-async function resetStats(){
+async function resetStats(scope){
   const isAdmin=me&&me.type==='admin';
-  if(!confirm(isAdmin?t('stats.reset_confirm_all'):t('stats.reset_confirm_own')))return;
-  const r=await api('POST','/api/stats/reset',{});
+  // Admin ohne scope → Auswahl-Dialog (eigenes vs. alle)
+  if(isAdmin&&!scope){document.getElementById('modal-reset-choice').classList.add('open');return;}
+  const useScope=isAdmin?(scope||'own'):'own';
+  const msg=useScope==='all'?t('stats.reset_confirm_all'):t('stats.reset_confirm_own');
+  if(!confirm(msg))return;
+  const r=await api('POST','/api/stats/reset',{scope:useScope});
   const data=await r.json();
   if(!r.ok){
-    if(data.code==='STATS_LOCKED'){loadStats();return;}  // Reauth abgelaufen → PW-Dialog
+    if(data.code==='STATS_LOCKED'){closeModal('modal-reset-choice');loadStats();return;}
     toast(data.error||t('error'),'error');return;
   }
+  closeModal('modal-reset-choice');
   toast(t('stats.reset_done',data.photos),'success');
   loadStats();
 }

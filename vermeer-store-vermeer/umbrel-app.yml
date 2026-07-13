@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "1.2.0"
+version: "1.3.0"
 tagline: Encrypted photo albums – private by design
 description: >-
   Vermeer stores your photos AES-256 encrypted on your Umbrel.
@@ -24,11 +24,10 @@ description: >-
   Default login: admin / admin (change immediately!)
 
 releaseNotes: >-
-  1.2.0 – Per-user statistics: every main user now has their own
-  statistics page (scoped to their photos and observers) protected by
-  password confirmation, including hidden-photo previews of their own
-  albums. Statistics can be reset independently: main users reset only
-  their own data, the admin resets globally.
+  1.3.0 – Security: automatic logout after 10 minutes of inactivity,
+  when the tab is closed, and (after a short grace period) when
+  switching away from the tab. Admins now get a clear choice when
+  resetting statistics: only their own profile, or all users globally.
 
 developer: Vermeer
 website: https://github.com/cfi700/vermeer-umbrel-app-store
