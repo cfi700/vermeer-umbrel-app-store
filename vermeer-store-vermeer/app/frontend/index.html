@@ -881,7 +881,7 @@ const T = {
     'stats.total_users':'Benutzer','stats.total_views':'Aufrufe gesamt',
     'stats.total_downloads':'Downloads','stats.storage_mb':'Speicher (MB)',
     'stats.no_data':'Noch keine Daten vorhanden',
-    'stats.viewers':'Betrachter',
+    'stats.viewers':'Betrachter','stats.obs_logins':'Letzte Beobachter-Anmeldungen','stats.user':'Benutzer','stats.time':'Zeitpunkt',
     'statspw.title':'Statistik entsperren','stats.reset_btn':'🗑 Zurücksetzen',
     'stats.reset_choice_title':'Statistik zurücksetzen','stats.reset_choice_desc':'Welche Statistik möchtest du zurücksetzen?',
     'stats.reset_own_btn':'Nur mein eigenes Profil','stats.reset_all_btn':'🗑 Alle Benutzer (gesamt)',
@@ -1017,7 +1017,7 @@ const T = {
     'stats.total_users':'Users','stats.total_views':'Total Views',
     'stats.total_downloads':'Downloads','stats.storage_mb':'Storage (MB)',
     'stats.no_data':'No data available yet',
-    'stats.viewers':'Viewers',
+    'stats.viewers':'Viewers','stats.obs_logins':'Recent Observer Logins','stats.user':'User','stats.time':'Time',
     'statspw.title':'Unlock Statistics','stats.reset_btn':'🗑 Reset',
     'stats.reset_choice_title':'Reset Statistics','stats.reset_choice_desc':'Which statistics do you want to reset?',
     'stats.reset_own_btn':'Only my own profile','stats.reset_all_btn':'🗑 All users (global)',
@@ -1384,7 +1384,6 @@ function renderStats(s, wrap) {
     { v: o.totalAlbums,    l: t('stats.total_albums'),     icon: '📁' },
     { v: o.totalUsers,     l: t('stats.total_users'),      icon: '👤' },
     { v: o.totalViews,     l: t('stats.total_views'),      icon: '👁' },
-    { v: o.totalDownloads, l: t('stats.total_downloads'),  icon: '⬇' },
     { v: o.sharedPhotos,   l: t('stats.shared'),           icon: '🔗' },
     { v: o.totalStorageMB + ' MB', l: t('stats.storage_mb'), icon: '💾' },
     { v: o.appVersion || '–',       l: t('stats.version'),    icon: '🏷' },
@@ -1425,7 +1424,7 @@ function renderStats(s, wrap) {
 
   // ── Top Photos ──
   renderStatsTable(wrap, `🖼 ${t('stats.top_photos')}`, s.topPhotos,
-    [t('stats.photo'), t('stats.album'), t('stats.owner'), t('stats.views'), t('stats.viewers'), t('stats.downloads'), ''],
+    [t('stats.photo'), t('stats.album'), t('stats.owner'), t('stats.views'), t('stats.viewers'), ''],
     (p, i, maxV) => `
       <td><span class="rank-badge ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</span></td>
       <td><span class="stat-photo-link" data-pid="${p.id}" data-viewers="${encodeURIComponent(JSON.stringify(p.viewers||[]))}">${esc(p.name)}</span></td>
@@ -1433,7 +1432,6 @@ function renderStats(s, wrap) {
       <td style="color:var(--muted);font-size:12px">${esc(p.ownerName)}</td>
       <td><strong>${p.views}</strong></td>
       <td style="color:var(--muted);font-size:12px;max-width:160px">${(p.viewers&&p.viewers.length)?esc(p.viewers.slice(0,3).map(v=>v.username).join(', '))+(p.viewers.length>3?' +'+(p.viewers.length-3):''):'–'}</td>
-      <td style="color:var(--muted)">${p.downloads}</td>
       <td style="width:100px"><div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(p.views/maxV*100)}%"></div></div></td>`,
     p => p.views
   );
@@ -1452,6 +1450,12 @@ function renderStats(s, wrap) {
   );
 
   // ── Top Viewers ──
+  renderStatsTable(wrap, `🕐 ${t('stats.obs_logins')}`, s.observerLogins,
+    [t('stats.user'), t('stats.time')],
+    (o) => `
+      <td>👁 ${esc(o.username)}</td>
+      <td style="color:var(--muted)">${fmtDateTime(o.ts)}</td>`);
+
   renderStatsTable(wrap, `👁 ${t('stats.top_viewers')}`, s.topViewers,
     ['Benutzer / User', t('stats.views'), ''],
     (u, i, maxV) => `
@@ -1748,7 +1752,6 @@ async function loadAlbumContent(albumId){
     const selBar=document.createElement('div');selBar.className='selection-bar';selBar.id='selection-bar';
     selBar.innerHTML=`<span class="selection-count" id="sel-count"></span>
       <button class="btn btn-ghost btn-sm" onclick="toggleSelectAll()" id="btn-sel-all">${t('selection.select_all')}</button>
-      <button class="btn btn-ghost btn-sm" onclick="downloadSelected()" id="btn-dl" style="display:none">${t('selection.download')}</button>
       <button class="btn btn-ghost btn-sm" onclick="setCoverSelected()" id="btn-cover" style="display:none">${t('cover.set_btn')}</button>
       <button class="btn btn-ghost btn-sm" onclick="openMoveModal()" id="btn-move" style="display:none">${t('selection.move')}</button>
       <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btn-del-sel" style="display:none">${t('selection.delete')}</button>`;
@@ -1953,12 +1956,9 @@ function updateSelectionBar(){
   const selPhotos=currentPhotos.filter(p=>selectedPhotos.has(p.id));
   const count=document.getElementById('sel-count');
   const btnAll=document.getElementById('btn-sel-all');
-  const btnDl=document.getElementById('btn-dl');
   const btnDel=document.getElementById('btn-del-sel');
   bar.classList.toggle('visible',n>0);
   if(count)count.textContent=t('selection.count',n);
-  // Download: only if all selected are downloadable (own photos)
-  if(btnDl)btnDl.style.display=(n>0&&selPhotos.every(p=>p.canDownload))?'':'none';
   // Delete: only own or admin
   const canDel=n>0&&selPhotos.every(p=>p.ownerId===me.id||me.role==='admin');
   if(btnDel)btnDel.style.display=canDel?'':'none';
@@ -1971,14 +1971,6 @@ function updateSelectionBar(){
   if(btnMove)btnMove.style.display=canMove?'':'none';
 }
 
-async function downloadSelected(){
-  for(const id of selectedPhotos){
-    const p=currentPhotos.find(p=>p.id===id);if(!p||!p.canDownload)continue;
-    const a=document.createElement('a');a.href=`/api/photos/${id}/download`;a.download=p.originalName;
-    document.body.appendChild(a);a.click();a.remove();
-    await new Promise(r=>setTimeout(r,300)); // small delay between downloads
-  }
-}
 
 
 async function setCoverSelected(){

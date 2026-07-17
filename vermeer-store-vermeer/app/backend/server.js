@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.5.0';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -83,6 +83,7 @@ function loadDB() {
   const db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
   if (!db.albums) db.albums = [];
   if (!db.photos) db.photos = [];
+  if (!db.observerLoginLog) db.observerLoginLog = [];
   db.users.forEach(u => {
     if (!u.canViewAlbums) u.canViewAlbums = [];
     if (u.mustChangePassword === undefined) u.mustChangePassword = false;
@@ -361,6 +362,9 @@ app.post('/api/login', rateLimit(10, 900000), (req, res) => {
       try { familyCache.set(req.sessionID, unwrapKey(user.familyWrappedDEK, kdf(password, user.kdfSalt))); } catch {}
     }
     user.lastLoginAt = Date.now();   // track observer's last visit
+    db.observerLoginLog = db.observerLoginLog || [];
+    db.observerLoginLog.push({ userId: user.id, ts: Date.now() });
+    if (db.observerLoginLog.length > 200) db.observerLoginLog.shift();
     saveDB(db);
     return res.json({ id: user.id, username: user.username, role: user.role, type: 'observer', mustChangePassword: !!user.mustChangePassword });
   }
@@ -935,30 +939,6 @@ app.get('/api/photos/:id/full', requireAuth, (req, res) => {
   } catch (e) { console.error('Full view error:', e.message); res.status(500).json({ error: 'Decryption failed' }); }
 });
 
-app.get('/api/photos/:id/download', requireAuth, (req, res) => {
-  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
-  const db = loadDB();
-  const photo = db.photos.find(p => p.id === req.params.id);
-  if (!photo) return res.status(404).json({ error: 'Photo not found' });
-  const me = getUser(db, req);
-  if (photo.ownerId !== req.session.userId || me.type === 'observer')
-    return res.status(403).json({ error: 'Only the owner can download this photo' });
-  if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId))
-    return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
-  const keyInfo = resolveReadKey(db, photo, req);
-  if (keyInfo.denied) return res.status(401).json({ error: 'Session key missing', code: 'DEK_MISSING' });
-  const f = path.join(PHOTOS_DIR, `${photo.id}.enc`);
-  if (!fs.existsSync(f)) return res.status(404).json({ error: 'File not found' });
-  try {
-    photo.downloads = (photo.downloads || 0) + 1; saveDB(db);
-    res.set('Content-Type', photo.mimeType || 'image/jpeg');
-    res.set('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(photo.originalName)}`);
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('X-Content-Type-Options', 'nosniff');
-    res.send(decryptPhotoFile(f, photo, keyInfo, 'photo'));
-  } catch (e) { console.error('Download error:', e.message); res.status(500).json({ error: 'Decryption failed' }); }
-});
-
 app.delete('/api/photos/:id', requireAuth, (req, res) => {
   const db = loadDB();
   const idx = db.photos.findIndex(p => p.id === req.params.id);
@@ -1049,7 +1029,6 @@ app.get('/api/stats', requireMainUser, (req, res) => {
     totalUsers: isAdmin ? fullDb.users.length : (fullDb.users.filter(u => u.parentUserId === meU.id).length + 1),
     scope: isAdmin ? 'all' : 'own',
     totalViews: db.photos.reduce((s, p) => s + (p.views || 0), 0),
-    totalDownloads: db.photos.reduce((s, p) => s + (p.downloads || 0), 0),
     sharedPhotos: db.photos.filter(p => p.shared).length,
     totalStorageMB: parseFloat((db.photos.reduce((s, p) => s + (p.size || 0), 0) / 1048576).toFixed(2)),
     appVersion: APP_VERSION
@@ -1061,7 +1040,7 @@ app.get('/api/stats', requireMainUser, (req, res) => {
     (p.viewLog || []).slice().reverse().forEach(e => { if (!seen.has(e.userId)) seen.set(e.userId, e.ts); });
     const viewers = [...seen.entries()].map(([id, ts]) => ({ username: nameOf(id), lastView: ts }));
     return {
-      id: p.id, name: p.originalName, views: p.views || 0, downloads: p.downloads || 0,
+      id: p.id, name: p.originalName, views: p.views || 0,
       uniqueViewers: seen.size, shared: p.shared,
       viewers,
       ownerName: nameOf(p.ownerId),
@@ -1084,7 +1063,12 @@ app.get('/api/stats', requireMainUser, (req, res) => {
   const vbd = {};
   db.photos.forEach(p => (p.viewLog || []).forEach(e => { if (e.ts >= cutoff) { const d = new Date(e.ts).toISOString().slice(0, 10); vbd[d] = (vbd[d] || 0) + 1; } }));
   const viewsTimeline = Object.entries(vbd).sort((a, b) => a[0].localeCompare(b[0])).map(([date, count]) => ({ date, count }));
-  res.json({ overview, topPhotos, topAlbums, topViewers, topUploaders, viewsTimeline });
+  // Letzte 10 Beobachter-Logins (gescoped: nur eigene Beobachter, Admin: alle)
+  const observerLogins = (fullDb.observerLoginLog || [])
+    .filter(e => { const u = fullDb.users.find(x => x.id === e.userId); return u && (isAdmin || u.parentUserId === meU.id); })
+    .slice(-10).reverse()
+    .map(e => ({ username: fullDb.users.find(x => x.id === e.userId)?.username ?? '?', ts: e.ts }));
+  res.json({ overview, topPhotos, topAlbums, topViewers, topUploaders, viewsTimeline, observerLogins });
 });
 
 // Reset statistics: main users reset their own data, admin resets everything
