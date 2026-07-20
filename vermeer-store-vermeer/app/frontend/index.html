@@ -1454,7 +1454,8 @@ function renderStats(s, wrap) {
     [t('stats.user'), t('stats.time')],
     (o) => `
       <td>👁 ${esc(o.username)}</td>
-      <td style="color:var(--muted)">${fmtDateTime(o.ts)}</td>`);
+      <td style="color:var(--muted)">${fmtDateTime(o.ts)}</td>`,
+    () => 1);
 
   renderStatsTable(wrap, `👁 ${t('stats.top_viewers')}`, s.topViewers,
     ['Benutzer / User', t('stats.views'), ''],
@@ -1487,7 +1488,7 @@ function renderStatsTable(wrap, title, rows, headers, rowFn, valueFn) {
       <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">${t('stats.no_data')}</div>`;
     wrap.appendChild(sec); return;
   }
-  const maxV = Math.max(...rows.map(valueFn), 1);
+  const maxV = valueFn ? Math.max(...rows.map(valueFn), 1) : 1;
   sec.innerHTML = `<div class="stats-section-header">${title}</div>
     <table class="stats-table">
       <thead><tr><th>#</th>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>

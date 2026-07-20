@@ -10,7 +10,7 @@ services:
     restart: on-failure
 
   web:
-    image: cfi700/vermeer:1.5.0
+    image: cfi700/vermeer:1.5.1
     restart: on-failure
     stop_grace_period: 1m
     volumes:
