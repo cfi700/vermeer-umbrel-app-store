@@ -1,6 +1,6 @@
 {
   "name": "vermeer",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Encrypted photo vault for Umbrel",
   "main": "server.js",
   "scripts": {

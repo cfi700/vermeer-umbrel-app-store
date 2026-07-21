@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.6.0';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -342,8 +342,13 @@ setInterval(() => { const now = Date.now(); for (const [k, b] of rateBuckets) if
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024, files: 50 },
-  fileFilter: (_, file, cb) => { if (!file.mimetype.startsWith('image/')) return cb(new Error('Images only')); cb(null, true); }
+  limits: { fileSize: 200 * 1024 * 1024, files: 50 },   // videos up to 200 MB
+  fileFilter: (_, file, cb) => {
+    const isImage = file.mimetype.startsWith('image/');
+    const isVideo = /^video\/(mp4|webm|quicktime)$/.test(file.mimetype);
+    if (!isImage && !isVideo) return cb(new Error('Images or videos (mp4/webm/mov) only'));
+    cb(null, true);
+  }
 });
 
 // ═══ AUTH ═══════════════════════════════════════════════════════
@@ -798,16 +803,21 @@ app.post('/api/photos/upload', requireAuth, requireDEK, (req, res) => {
     const uploaded = [], errors = [];
     for (const file of req.files) {
       try {
-        const thumbBuffer = await sharp(file.buffer).resize(400, 400, { fit: 'cover', position: 'centre' }).jpeg({ quality: 75 }).toBuffer();
+        const isVideo = file.mimetype.startsWith('video/');
         const photoId = uid();
         const e1 = encryptGCM(file.buffer, key);
         fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), e1.data);
-        const e2 = encryptGCM(thumbBuffer, key);
-        fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
-        db.photos.push({ id: photoId, albumId, ownerId: req.session.userId,
+        const rec = { id: photoId, albumId, ownerId: req.session.userId,
           originalName: file.originalname, mimeType: file.mimetype, size: file.size, uploadedAt: Date.now(),
-          encryption: enc, iv: e1.iv, tag: e1.tag, thumbIv: e2.iv, thumbTag: e2.tag,
-          shared: false, views: 0, downloads: 0, viewLog: [] });
+          encryption: enc, iv: e1.iv, tag: e1.tag,
+          shared: false, views: 0, downloads: 0, viewLog: [] };
+        if (!isVideo) {
+          const thumbBuffer = await sharp(file.buffer).resize(400, 400, { fit: 'cover', position: 'centre' }).jpeg({ quality: 75 }).toBuffer();
+          const e2 = encryptGCM(thumbBuffer, key);
+          fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
+          rec.thumbIv = e2.iv; rec.thumbTag = e2.tag;
+        }
+        db.photos.push(rec);
         uploaded.push({ id: photoId, name: file.originalname });
         file.buffer = null;
       } catch (e) { console.error('Upload error', file.originalname, e.message); errors.push(file.originalname); }
@@ -826,6 +836,7 @@ app.get('/api/albums/:albumId/photos', requireAuth, (req, res) => {
     const keyInfo = resolveReadKey(db, p, req);
     return { id: p.id, albumId: p.albumId, originalName: p.originalName, uploadedAt: p.uploadedAt, size: p.size,
       ownerId: p.ownerId, ownerName: owner?.username ?? '?', shared: p.shared || false,
+      mimeType: p.mimeType || 'image/jpeg',
       pending: !!keyInfo.pending,
       canDownload: p.ownerId === req.session.userId && me.type !== 'observer',
       canShare: p.ownerId === req.session.userId && me.type !== 'observer' };

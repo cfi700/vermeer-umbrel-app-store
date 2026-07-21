@@ -324,6 +324,8 @@
   .thumb-pending{width:100%;aspect-ratio:1;background:var(--surface2);display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:11px;text-align:center;padding:8px}
   .thumb-pending .tp-icon{font-size:24px;opacity:.5}
+  .video-tile{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a22,#22222c)}
+  .video-tile .vt-icon{font-size:34px;opacity:.8}
 
 
   /* ── TILE VIEW (v1.0.0) ── */
@@ -606,6 +608,8 @@
     <button class="lb-arrow left" id="lb-prev" onclick="lbNavigate(-1)">&#8249;</button>
     <div class="lb-img-overlay" id="lb-img-overlay"></div>
   <canvas id="lightbox-img" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 24px 80px rgba(0,0,0,.8);display:block"></canvas>
+  <video id="lb-video" controls playsinline controlsList="nodownload" disablepictureinpicture
+    style="display:none;max-width:100%;max-height:calc(100vh - 100px);border-radius:6px;box-shadow:0 24px 80px rgba(0,0,0,.8)"></video>
     <button class="lb-arrow right" id="lb-next" onclick="lbNavigate(1)">&#8250;</button>
   </div>
   <div class="lb-strip" id="lb-strip"></div>
@@ -1842,6 +1846,13 @@ function buildBreadcrumb(albumId){
   return crumbs;
 }
 
+function markVideoTile(id){
+  const ph=document.getElementById('tp-'+id);
+  if(!ph)return;
+  ph.classList.remove('thumb-loading');
+  ph.classList.add('video-tile');
+  ph.innerHTML='<span class="vt-icon">🎬</span>';
+}
 let photosLoadToken=0;
 async function loadPhotos(albumId,wrap){
   const myToken=++photosLoadToken;   // jüngster Ladevorgang gewinnt
@@ -1896,7 +1907,7 @@ async function loadPhotos(albumId,wrap){
       card.appendChild(imgWrap);
 
       // ── Info (Beobachter sehen nur das Bild – kein Name, kein Datum) ──
-      if(me&&me.type==='observer'){grid.appendChild(card);loadThumb(p.id,i);return;}
+      if(me&&me.type==='observer'){grid.appendChild(card);if(p.mimeType&&p.mimeType.startsWith('video/')){markVideoTile(p.id);}else{loadThumb(p.id,i);}return;}
       const info=document.createElement('div');
       info.className='photo-info';
       const nameEl=document.createElement('div');
@@ -1919,7 +1930,8 @@ async function loadPhotos(albumId,wrap){
       card.appendChild(info);
 
       grid.appendChild(card);
-      loadThumb(p.id,i);
+      if(p.mimeType&&p.mimeType.startsWith('video/')){markVideoTile(p.id);}
+      else{loadThumb(p.id,i);}
     });
   }catch(e){
     console.error('loadPhotos error:',e);
@@ -2121,6 +2133,24 @@ function renderLightbox(){
 
   // Canvas-based rendering: prevents "Save image as" from getting a usable URL
   const canvas=document.getElementById('lightbox-img');
+  const vid=document.getElementById('lb-video');
+  // ── Video-Wiedergabe ──
+  if(p.mimeType&&p.mimeType.startsWith('video/')){
+    canvas.style.display='none';
+    vid.style.display='block';
+    vid.src='';
+    fetch(`/api/photos/${p.id}/full`).then(r=>r.ok?r.blob():null).then(b=>{
+      if(!b)return;
+      if(vid._url)URL.revokeObjectURL(vid._url);
+      vid._url=URL.createObjectURL(b);
+      vid.src=vid._url;
+      vid.play().catch(()=>{});
+    }).catch(()=>{});
+    return;
+  }
+  // ── Foto: Video stoppen und verstecken ──
+  if(vid){vid.pause();vid.style.display='none';if(vid._url){URL.revokeObjectURL(vid._url);vid._url=null;}vid.src='';}
+  canvas.style.display='block';
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -2187,7 +2217,9 @@ function lbNavigate(dir){
   renderLightbox();
 }
 
+function stopLbVideo(){const v=document.getElementById('lb-video');if(v){v.pause();if(v._url){URL.revokeObjectURL(v._url);v._url=null;}v.src='';v.style.display='none';}}
 function closeLightbox(){
+  stopLbVideo();
   document.getElementById('lightbox').classList.remove('open');
   const canvas=document.getElementById('lightbox-img');
   const ctx=canvas.getContext('2d');

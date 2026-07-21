@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "1.5.1"
+version: "1.6.0"
 tagline: Encrypted photo albums – private by design
 description: >-
   Vermeer stores your photos AES-256 encrypted on your Umbrel.
@@ -24,10 +24,11 @@ description: >-
   Default login: admin / admin (change immediately!)
 
 releaseNotes: >-
-  1.5.1 – Hotfix: the statistics page crashed once the first observer
-  login had been recorded (missing value function in the new login
-  table). The table renderer is now defensive against this class of
-  error.
+  1.6.0 – Video support: upload mp4/webm/mov files (up to 200 MB),
+  stored with the same per-user encryption as photos. Videos appear as
+  clapperboard tiles in the gallery and play directly in the lightbox.
+  View tracking, hidden albums and observer restrictions apply to
+  videos exactly as to photos.
 
 developer: Vermeer
 website: https://github.com/cfi700/vermeer-umbrel-app-store
