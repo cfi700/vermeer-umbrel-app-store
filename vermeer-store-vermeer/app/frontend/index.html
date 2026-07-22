@@ -326,6 +326,12 @@
   .thumb-pending .tp-icon{font-size:24px;opacity:.5}
   .video-tile{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a22,#22222c)}
   .video-tile .vt-icon{font-size:34px;opacity:.8}
+  .is-video{position:relative}
+  .link-badge{position:absolute;top:6px;left:6px;z-index:2;background:rgba(0,0,0,.6);border-radius:999px;
+    width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;backdrop-filter:blur(2px)}
+  .is-video::after{content:'▶';position:absolute;right:6px;bottom:6px;z-index:2;background:rgba(0,0,0,.65);
+    color:#fff;border-radius:999px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+    font-size:11px;padding-left:2px;backdrop-filter:blur(2px)}
 
 
   /* ── TILE VIEW (v1.0.0) ── */
@@ -341,6 +347,8 @@
     user-select:none;-webkit-user-drag:none;pointer-events:none}
   .album-tile .at-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.75) 0%,rgba(0,0,0,.15) 55%,transparent 100%)}
   .album-tile.has-cover .at-info{display:none}
+  .album-tile .at-count{position:absolute;top:8px;left:8px;z-index:3;background:rgba(0,0,0,.6);
+    color:#fff;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;backdrop-filter:blur(3px)}
   .album-tile.has-cover .at-shade{background:none}
   .album-tile .at-info{position:absolute;left:10px;right:10px;bottom:8px;z-index:2}
   .album-tile .at-name{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 3px rgba(0,0,0,.6)}
@@ -784,6 +792,19 @@
 </div>
 
 <!-- MODAL: Foto verschieben -->
+<div class="modal-backdrop" id="modal-link">
+  <div class="modal modal-lg">
+    <h2 data-i18n="link.title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px"><span id="link-count"></span></p>
+    <div class="perm-tree" id="link-album-list"></div>
+    <div id="link-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-link')" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" id="link-confirm-btn" onclick="doLinkSelected()" data-i18n="link.confirm"></button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-move">
   <div class="modal modal-lg">
     <h2 data-i18n="move.title"></h2>
@@ -808,7 +829,7 @@
   </div>
 </div>
 <div id="toast"></div>
-<input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="handleFiles(this.files)">
+<input type="file" id="file-input" multiple accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" style="display:none" onchange="handleFiles(this.files)">
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
@@ -919,7 +940,12 @@ const T = {
     'photo.pending':'Wartet auf Freigabe durch Besitzer',
     'btn.refresh':'↺ Aktualisieren',
     'stats.version':'App-Version',
-    'cover.set_btn':'🖼 Als Cover','selection.move':'📁 Verschieben',
+    'cover.set_btn':'🖼 Als Cover','selection.move':'📁 Verschieben','selection.link':'🔗 Verlinken',
+    'link.title':'Fotos in Alben verlinken','link.confirm':'Verlinken','link.pick_one':'Bitte mindestens ein Zielalbum wählen.',
+    'link.count':(n)=>`${n} Foto${n!==1?'s':''} ausgewählt – in welche Alben verlinken?`,
+    'link.done':(n)=>`${n} Verlinkung${n!==1?'en':''} erstellt`,'link.skipped':'übersprungen',
+    'link.removed':'Verlinkung entfernt','link.done_removed':(n)=>`${n} Verlinkung${n!==1?'en':''} entfernt`,'link.badge_title':'Verlinkt – Original liegt in einem anderen Album',
+    'link.remove_btn':'🔗 Aus diesem Album entfernen',
     'move.title':'Fotos verschieben','move.confirm':'Hierher verschieben',
     'move.count':(n)=>`${n} Foto${n!==1?'s':''} ausgewählt – Zielalbum wählen:`,
     'move.no_targets':'Keine passenden Zielalben vorhanden.',
@@ -1055,7 +1081,12 @@ const T = {
     'photo.pending':'Awaiting re-encryption by owner',
     'btn.refresh':'↺ Refresh',
     'stats.version':'App Version',
-    'cover.set_btn':'🖼 Set as cover','selection.move':'📁 Move',
+    'cover.set_btn':'🖼 Set as cover','selection.move':'📁 Move','selection.link':'🔗 Link',
+    'link.title':'Link Photos into Albums','link.confirm':'Link','link.pick_one':'Please choose at least one target album.',
+    'link.count':(n)=>`${n} photo${n!==1?'s':''} selected – link into which albums?`,
+    'link.done':(n)=>`${n} link${n!==1?'s':''} created`,'link.skipped':'skipped',
+    'link.removed':'Link removed','link.done_removed':(n)=>`${n} link${n!==1?'s':''} removed`,'link.badge_title':'Linked – original is in another album',
+    'link.remove_btn':'🔗 Remove from this album',
     'move.title':'Move Photos','move.confirm':'Move here',
     'move.count':(n)=>`${n} photo${n!==1?'s':''} selected – choose target album:`,
     'move.no_targets':'No suitable target albums available.',
@@ -1251,6 +1282,41 @@ async function checkSession(){
     bootApp();
   }catch{}
 }
+// ── Android/Browser Zurück-Navigation ────────────────────────
+// Prinzip: Beim Öffnen von Album/Lightbox pushen wir einen History-State.
+// Der Hardware-Zurück-Button löst 'popstate' aus → wir navigieren in der
+// App zurück, statt den Tab zu verlassen.
+let navReady=false;
+function setupBackNav(){
+  if(navReady)return; navReady=true;
+  // Basis-State, damit der erste Zurück-Druck abgefangen werden kann
+  history.replaceState({v:'root'},'');
+  window.addEventListener('popstate',()=>{
+    // 1) Lightbox offen → nur schließen
+    if(document.getElementById('lightbox').classList.contains('open')){
+      closeLightbox();
+      pushAppState();   // State wieder auffüllen, damit erneutes Zurück wirkt
+      return;
+    }
+    // 2) Modal offen → schließen
+    const openModal=document.querySelector('.modal-backdrop.open, #stat-preview-backdrop.open');
+    if(openModal){openModal.classList.remove('open');pushAppState();return;}
+    // 3) In einem Album → ein Album hoch (bzw. Home)
+    if(currentAlbumId){
+      const cur=allAlbums.find(a=>a.id===currentAlbumId);
+      if(cur&&cur.parentId)selectAlbum(cur.parentId);else goHome();
+      pushAppState();
+      return;
+    }
+    // 4) Auf Home-Ebene → App darf normal verlassen werden (nichts tun,
+    //    der Browser navigiert dann tatsächlich zurück/schließt)
+  });
+}
+function pushAppState(){
+  if(!navReady)return;
+  history.pushState({v:'app',album:currentAlbumId||null,ts:Date.now()},'');
+}
+
 // ── Auto-Logout ──────────────────────────────────────────────
 let idleTimer=null;
 const IDLE_MS=10*60*1000;   // 10 Minuten Inaktivität
@@ -1304,6 +1370,7 @@ function bootApp(){
   }
   applyTranslations();loadAlbums();
   setupAutoLogout();
+  setupBackNav();
 }
 
 // ── NAVIGATION ──────────────────────────────────────────────────────
@@ -1694,7 +1761,9 @@ async function selectAlbum(id){
   const a=allAlbums.find(x=>x.id===id);
   if(a&&a.locked){openPinModal(a);return;}
   await relockIfLeavingHidden(id);
+  const entering=id&&id!==currentAlbumId;
   currentAlbumId=id;selectedPhotos.clear();
+  if(entering)pushAppState();   // Zurück-Button springt ein Album hoch
   await loadAlbums();   // rendert bereits loadAlbumContent(currentAlbumId) – kein Doppel-Render
 }
 async function goHome(){
@@ -1759,6 +1828,8 @@ async function loadAlbumContent(albumId){
       <button class="btn btn-ghost btn-sm" onclick="toggleSelectAll()" id="btn-sel-all">${t('selection.select_all')}</button>
       <button class="btn btn-ghost btn-sm" onclick="setCoverSelected()" id="btn-cover" style="display:none">${t('cover.set_btn')}</button>
       <button class="btn btn-ghost btn-sm" onclick="openMoveModal()" id="btn-move" style="display:none">${t('selection.move')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="openLinkModal()" id="btn-link" style="display:none">${t('selection.link')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="unlinkSelected()" id="btn-unlink" style="display:none">${t('link.remove_btn')}</button>
       <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btn-del-sel" style="display:none">${t('selection.delete')}</button>`;
     content.appendChild(selBar);
   }
@@ -1809,6 +1880,9 @@ function buildAlbumTile(a){
   }
 
   const shade=document.createElement('div');shade.className='at-shade';tile.appendChild(shade);
+  const cnt=document.createElement('div');cnt.className='at-count';
+  cnt.textContent=a.locked?'🔒':a.photoCount;
+  tile.appendChild(cnt);
   const info=document.createElement('div');info.className='at-info';
   const nm=document.createElement('div');nm.className='at-name';
   nm.textContent=a.name;
@@ -1846,6 +1920,13 @@ function buildBreadcrumb(albumId){
   return crumbs;
 }
 
+function videoTile(p,i){
+  const ph=document.getElementById('tp-'+p.id);
+  if(p.hasThumb){
+    if(ph)ph.classList.add('is-video');
+    loadThumb(p.id,i);
+  } else markVideoTile(p.id);
+}
 function markVideoTile(id){
   const ph=document.getElementById('tp-'+id);
   if(!ph)return;
@@ -1907,7 +1988,7 @@ async function loadPhotos(albumId,wrap){
       card.appendChild(imgWrap);
 
       // ── Info (Beobachter sehen nur das Bild – kein Name, kein Datum) ──
-      if(me&&me.type==='observer'){grid.appendChild(card);if(p.mimeType&&p.mimeType.startsWith('video/')){markVideoTile(p.id);}else{loadThumb(p.id,i);}return;}
+      if(me&&me.type==='observer'){grid.appendChild(card);if(p.mimeType&&p.mimeType.startsWith('video/')){videoTile(p,i);}else{loadThumb(p.id,i);}return;}
       const info=document.createElement('div');
       info.className='photo-info';
       const nameEl=document.createElement('div');
@@ -1929,8 +2010,12 @@ async function loadPhotos(albumId,wrap){
       info.appendChild(metaEl);
       card.appendChild(info);
 
+      if(p.linkedHere){
+        const lk=document.createElement('div');lk.className='link-badge';lk.textContent='🔗';
+        lk.title=t('link.badge_title');imgWrap.appendChild(lk);
+      }
       grid.appendChild(card);
-      if(p.mimeType&&p.mimeType.startsWith('video/')){markVideoTile(p.id);}
+      if(p.mimeType&&p.mimeType.startsWith('video/')){videoTile(p,i);}
       else{loadThumb(p.id,i);}
     });
   }catch(e){
@@ -1982,6 +2067,12 @@ function updateSelectionBar(){
   const btnMove=document.getElementById('btn-move');
   const canMove=n>0&&selPhotos.every(p=>p.ownerId===me.id||me.role==='admin');
   if(btnMove)btnMove.style.display=canMove?'':'none';
+  const btnLink=document.getElementById('btn-link');
+  if(btnLink)btnLink.style.display=canMove?'':'none';
+  // "Aus Album entfernen" nur wenn alle Ausgewählten hier bloß verlinkt sind
+  const btnUnlink=document.getElementById('btn-unlink');
+  const allLinked=n>0&&selPhotos.every(p=>p.linkedHere);
+  if(btnUnlink)btnUnlink.style.display=allLinked?'':'none';
 }
 
 
@@ -2023,6 +2114,64 @@ function openMoveModal(){
   document.getElementById('modal-move').classList.add('open');
 }
 function albumDepth(a){let d=0,cur=a;while(cur&&cur.parentId){d++;cur=allAlbums.find(x=>x.id===cur.parentId);}return d;}
+
+// ── Verlinken (Foto in mehrere Alben) ──
+function openLinkModal(){
+  if(selectedPhotos.size===0)return;
+  document.getElementById('link-count').textContent=t('link.count',selectedPhotos.size);
+  document.getElementById('link-err').style.display='none';
+  // Nur Alben mit gleichem Schlüsselkontext wie die aktuellen Fotos (Variante A):
+  // Praktisch = Alben, in die man hochladen darf, außer dem aktuellen Album selbst.
+  const targets=allAlbums.filter(a=>a.canUpload&&a.id!==currentAlbumId&&a.id!=='__shared__');
+  const list=document.getElementById('link-album-list');
+  if(!targets.length){
+    list.innerHTML=`<div style="padding:12px;color:var(--muted);font-size:13px">${t('move.no_targets')}</div>`;
+  } else {
+    list.innerHTML=targets.map(a=>{
+      const indent=albumDepth(a)*16;
+      return `<label class="perm-album-item" style="padding-left:${8+indent}px">
+        <input type="checkbox" class="link-target" value="${a.id}">
+        <span>${a.effectiveHidden?'🕶 ':''}${esc(a.name)}</span>
+        <span style="color:var(--muted);font-size:11px;margin-left:6px">${t('albums.photos_count',a.photoCount)}</span>
+      </label>`;
+    }).join('');
+  }
+  document.getElementById('modal-link').classList.add('open');
+}
+async function doLinkSelected(){
+  const targetIds=[...document.querySelectorAll('.link-target:checked')].map(el=>el.value);
+  const errEl=document.getElementById('link-err');errEl.style.display='none';
+  if(!targetIds.length){errEl.textContent=t('link.pick_one');errEl.style.display='block';return;}
+  const ids=[...selectedPhotos];
+  let total=0,skipped=0;
+  for(const targetAlbumId of targetIds){
+    const r=await api('PUT','/api/photos/links',{photoIds:ids,targetAlbumId});
+    const data=await r.json();
+    if(r.ok){total+=data.linked;skipped+=data.skipped;}
+  }
+  closeModal('modal-link');
+  selectedPhotos.clear();
+  toast(t('link.done',total)+(skipped?` (${skipped} ${t('link.skipped')})`:''),total?'success':'error');
+  await loadAlbums();
+  if(currentAlbumId)loadAlbumContent(currentAlbumId);
+}
+async function unlinkPhoto(photoId){
+  const r=await api('DELETE',`/api/photos/${photoId}/links/${currentAlbumId}`);
+  if(r.ok){toast(t('link.removed'),'success');if(currentAlbumId)loadAlbumContent(currentAlbumId);await loadAlbums();}
+  else toast((await r.json()).error||t('error'),'error');
+}
+async function unlinkSelected(){
+  const ids=[...selectedPhotos];
+  let done=0;
+  for(const id of ids){
+    const r=await api('DELETE',`/api/photos/${id}/links/${currentAlbumId}`);
+    if(r.ok)done++;
+  }
+  selectedPhotos.clear();
+  toast(t('link.done_removed',done),'success');
+  if(currentAlbumId)loadAlbumContent(currentAlbumId);
+  await loadAlbums();
+}
 async function doMoveSelected(){
   if(!moveTargetId||selectedPhotos.size===0)return;
   const errEl=document.getElementById('move-err');errEl.style.display='none';
@@ -2119,6 +2268,7 @@ async function loadThumb(id,idx){
 // ═══════════════════════════════════════════════════════════════════
 function openLightbox(idx){
   lbPhotos=currentPhotos;lbIndex=idx;
+  pushAppState();   // Zurück-Button schließt zuerst die Lightbox
   document.getElementById('lightbox').classList.add('open');
   renderLightbox();
   buildStrip();
@@ -2126,6 +2276,8 @@ function openLightbox(idx){
 
 function renderLightbox(){
   const p=lbPhotos[lbIndex];if(!p)return;
+  // View exakt einmal pro Öffnung zählen (Server dedupliziert zusätzlich 10 Min)
+  fetch(`/api/photos/${p.id}/view`,{method:'POST'}).catch(()=>{});
   document.getElementById('lb-title').textContent=(me&&me.type==='observer')?'':p.originalName;
   document.getElementById('lb-counter').textContent=`${lbIndex+1} / ${lbPhotos.length}`;
   document.getElementById('lb-prev').disabled=lbIndex===0;
@@ -2138,14 +2290,22 @@ function renderLightbox(){
   if(p.mimeType&&p.mimeType.startsWith('video/')){
     canvas.style.display='none';
     vid.style.display='block';
-    vid.src='';
-    fetch(`/api/photos/${p.id}/full`).then(r=>r.ok?r.blob():null).then(b=>{
-      if(!b)return;
-      if(vid._url)URL.revokeObjectURL(vid._url);
-      vid._url=URL.createObjectURL(b);
-      vid.src=vid._url;
+    if(vid._url){URL.revokeObjectURL(vid._url);vid._url=null;}
+    if(p.streamable){
+      // Echtes Streaming: Browser holt sich Byte-Ranges selbst (sofortiger Start, Spulen)
+      vid.src=`/api/photos/${p.id}/stream`;
       vid.play().catch(()=>{});
-    }).catch(()=>{});
+    } else {
+      // Fallback für Bestandsvideos (v1.6, Ganzdatei) – wird beim nächsten
+      // Login des Besitzers automatisch auf das Streaming-Format migriert
+      vid.src='';
+      fetch(`/api/photos/${p.id}/full`).then(r=>r.ok?r.blob():null).then(b=>{
+        if(!b)return;
+        vid._url=URL.createObjectURL(b);
+        vid.src=vid._url;
+        vid.play().catch(()=>{});
+      }).catch(()=>{});
+    }
     return;
   }
   // ── Foto: Video stoppen und verstecken ──

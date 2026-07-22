@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.9.6';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -57,6 +57,69 @@ function decryptLegacyCBC(data, ivHex) {
   const d = crypto.createDecipheriv('aes-256-cbc', LEGACY_KEY, Buffer.from(ivHex, 'hex'));
   return Buffer.concat([d.update(data), d.final()]);
 }
+// ─── Chunked encryption "vmr1" for videos (1 MB blocks, random access) ───
+const { spawnSync } = require('child_process');
+const os = require('os');
+// Extract a 400x400 poster frame from a plaintext video buffer via ffmpeg.
+// Uses a short-lived temp file (ffmpeg needs seekable input for mp4/mov);
+// the file is removed immediately afterwards.
+function extractVideoPoster(plainBuf) {
+  const tmpIn = path.join(os.tmpdir(), `vmr-${crypto.randomBytes(6).toString('hex')}.vid`);
+  const tmpOut = tmpIn + '.jpg';
+  const vf = 'scale=400:400:force_original_aspect_ratio=increase,crop=400:400';
+  try {
+    fs.writeFileSync(tmpIn, plainBuf);
+    let r = spawnSync('ffmpeg', ['-y', '-ss', '1', '-i', tmpIn, '-frames:v', '1', '-vf', vf, '-q:v', '4', tmpOut], { timeout: 20000 });
+    if (r.status !== 0 || !fs.existsSync(tmpOut)) {
+      r = spawnSync('ffmpeg', ['-y', '-i', tmpIn, '-frames:v', '1', '-vf', vf, '-q:v', '4', tmpOut], { timeout: 20000 });
+      if (r.status !== 0 || !fs.existsSync(tmpOut)) return null;
+    }
+    return fs.readFileSync(tmpOut);
+  } catch { return null; }
+  finally {
+    try { fs.unlinkSync(tmpIn); } catch {}
+    try { fs.unlinkSync(tmpOut); } catch {}
+  }
+}
+
+const CHUNK_SIZE = 1024 * 1024;
+const CHUNK_OVERHEAD = 28;   // 12 IV + 16 GCM tag per chunk
+function chunkAAD(photoId, index) { return Buffer.from(`vmr1:${photoId}:${index}`); }
+function encryptChunked(plainBuf, key, photoId) {
+  const parts = []; let count = 0;
+  for (let off = 0; off < plainBuf.length; off += CHUNK_SIZE) {
+    const slice = plainBuf.subarray(off, Math.min(off + CHUNK_SIZE, plainBuf.length));
+    const iv = crypto.randomBytes(12);
+    const cip = crypto.createCipheriv('aes-256-gcm', key, iv);
+    cip.setAAD(chunkAAD(photoId, count));
+    const data = Buffer.concat([cip.update(slice), cip.final()]);
+    parts.push(iv, data, cip.getAuthTag());
+    count++;
+  }
+  return { data: Buffer.concat(parts), chunkCount: count, plainSize: plainBuf.length };
+}
+function readDecryptedChunk(fd, photo, key, index) {
+  const encChunkSize = CHUNK_SIZE + CHUNK_OVERHEAD;
+  const isLast = index === photo.chunkCount - 1;
+  const plainLen = isLast ? (photo.plainSize - index * CHUNK_SIZE) : CHUNK_SIZE;
+  const encLen = plainLen + CHUNK_OVERHEAD;
+  const buf = Buffer.alloc(encLen);
+  fs.readSync(fd, buf, 0, encLen, index * encChunkSize);
+  const iv = buf.subarray(0, 12), tag = buf.subarray(encLen - 16), data = buf.subarray(12, encLen - 16);
+  const d = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  d.setAAD(chunkAAD(photo.id, index));
+  d.setAuthTag(tag);
+  return Buffer.concat([d.update(data), d.final()]);
+}
+function decryptChunkedAll(filePath, photo, key) {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const parts = [];
+    for (let i = 0; i < photo.chunkCount; i++) parts.push(readDecryptedChunk(fd, photo, key, i));
+    return Buffer.concat(parts);
+  } finally { fs.closeSync(fd); }
+}
+
 function wrapKey(keyBuf, kek) { const w = encryptGCM(keyBuf, kek); return { iv: w.iv, tag: w.tag, data: w.data.toString('hex') }; }
 function unwrapKey(wrapped, kek) { return decryptGCM(Buffer.from(wrapped.data, 'hex'), kek, wrapped.iv, wrapped.tag); }
 function generateRecoveryCode() { return crypto.randomBytes(16).toString('hex').match(/.{4}/g).join('-'); }
@@ -84,6 +147,7 @@ function loadDB() {
   if (!db.albums) db.albums = [];
   if (!db.photos) db.photos = [];
   if (!db.observerLoginLog) db.observerLoginLog = [];
+  db.photos.forEach(p => { if (!Array.isArray(p.linkedAlbumIds)) p.linkedAlbumIds = []; });
   db.users.forEach(u => {
     if (!u.canViewAlbums) u.canViewAlbums = [];
     if (u.mustChangePassword === undefined) u.mustChangePassword = false;
@@ -160,6 +224,16 @@ function ancestorChain(db, albumId) {
   return chain;
 }
 // Granted to another MAIN user (admin-managed) → SHARED_KEY
+// A photo appears in an album if it's its home album OR it's linked there
+function photoInAlbum(p, albumId) {
+  return p.albumId === albumId || (Array.isArray(p.linkedAlbumIds) && p.linkedAlbumIds.includes(albumId));
+}
+// Key context of an album: 'shared' | 'family' | 'user' – determines link compatibility
+function albumKeyContext(db, albumId) {
+  if (albumIsGranted(db, albumId)) return 'shared';
+  if (albumIsFamilyGranted(db, albumId)) return 'family';
+  return 'user';
+}
 function albumIsGranted(db, albumId) {
   const chain = ancestorChain(db, albumId);
   return db.users.some(u => u.type === 'user' && (u.canViewAlbums || []).some(id => chain.includes(id)));
@@ -241,22 +315,30 @@ function migrateUserPhotos(userId, dek, familyDek) {
     let changed = 0;
     for (const p of db.photos) {
       if (p.ownerId !== userId) continue;
+      const isChunked = p.encFormat === 'chunked';
+      const isVideo = (p.mimeType || '').startsWith('video/');
       const needsLegacy = !p.encryption;
-      const needsReenc  = (p.encryption === 'user' || p.encryption === 'family') && p.reencryptPending;
-      if (!needsLegacy && !needsReenc) continue;
+      const needsReenc = p.encryption && p.reencryptPending;
+      const needsChunkConvert = p.encryption && isVideo && !isChunked;   // v1.6 whole-file videos
+      const needsPoster = p.encryption && isVideo && !p.thumbIv;         // retrofit poster frames
+      if (!needsLegacy && !needsReenc && !needsChunkConvert && !needsPoster) continue;
       const photoPath = path.join(PHOTOS_DIR, `${p.id}.enc`);
       const thumbPath = path.join(THUMBS_DIR, `${p.id}.enc`);
       if (!fs.existsSync(photoPath)) continue;
+
+      const curKey = !p.encryption ? null : (p.encryption === 'family' ? familyDek : (p.encryption === 'shared' ? SHARED_KEY : dek));
+      if (p.encryption && !curKey) continue;
+
       let plain, thumbPlain = null;
       try {
         if (needsLegacy) {
           plain = decryptLegacyCBC(fs.readFileSync(photoPath), p.iv);
           if (fs.existsSync(thumbPath)) thumbPlain = decryptLegacyCBC(fs.readFileSync(thumbPath), p.thumbIv);
+        } else if (isChunked) {
+          plain = decryptChunkedAll(photoPath, p, curKey);
         } else {
-          const cur = p.encryption === 'family' ? familyDek : dek;
-          if (!cur) continue;
-          plain = decryptGCM(fs.readFileSync(photoPath), cur, p.iv, p.tag);
-          if (fs.existsSync(thumbPath)) thumbPlain = decryptGCM(fs.readFileSync(thumbPath), cur, p.thumbIv, p.thumbTag);
+          plain = decryptGCM(fs.readFileSync(photoPath), curKey, p.iv, p.tag);
+          if (!isVideo && fs.existsSync(thumbPath)) thumbPlain = decryptGCM(fs.readFileSync(thumbPath), curKey, p.thumbIv, p.thumbTag);
         }
       } catch (e) { console.error('Migration decrypt failed:', p.id, e.message); continue; }
 
@@ -265,15 +347,34 @@ function migrateUserPhotos(userId, dek, familyDek) {
       else if (albumIsFamilyGranted(db, p.albumId) && familyDek) target = { key: familyDek, enc: 'family' };
       else target = { key: dek, enc: 'user' };
 
-      const e1 = encryptGCM(plain, target.key);
-      fs.writeFileSync(photoPath, e1.data);
-      p.iv = e1.iv; p.tag = e1.tag;
-      if (thumbPlain) { const e2 = encryptGCM(thumbPlain, target.key); fs.writeFileSync(thumbPath, e2.data); p.thumbIv = e2.iv; p.thumbTag = e2.tag; }
+      if (isVideo) {
+        // Nur neu verschlüsseln, wenn Format/Schlüssel sich ändern (nicht bei reinem Poster-Nachrüsten)
+        if (needsLegacy || needsReenc || needsChunkConvert) {
+          const ec = encryptChunked(plain, target.key, p.id);
+          fs.writeFileSync(photoPath, ec.data);
+          p.encFormat = 'chunked'; p.chunkSize = CHUNK_SIZE;
+          p.chunkCount = ec.chunkCount; p.plainSize = ec.plainSize;
+          delete p.iv; delete p.tag;
+        }
+        if (!p.thumbIv) {
+          const poster = extractVideoPoster(plain);
+          if (poster) {
+            const e2 = encryptGCM(poster, target.key);
+            fs.writeFileSync(thumbPath, e2.data);
+            p.thumbIv = e2.iv; p.thumbTag = e2.tag;
+          }
+        }
+      } else {
+        const e1 = encryptGCM(plain, target.key);
+        fs.writeFileSync(photoPath, e1.data);
+        p.iv = e1.iv; p.tag = e1.tag;
+        if (thumbPlain) { const e2 = encryptGCM(thumbPlain, target.key); fs.writeFileSync(thumbPath, e2.data); p.thumbIv = e2.iv; p.thumbTag = e2.tag; }
+      }
       p.encryption = target.enc;
       delete p.reencryptPending;
       changed++;
     }
-    if (changed) { saveDB(db); console.log(`Migration: ${changed} photo(s) re-encrypted for ${userId}`); }
+    if (changed) { saveDB(db); console.log(`Migration: ${changed} item(s) re-encrypted for ${userId}`); }
   } catch (e) { console.error('Migration error:', e.message); }
 }
 
@@ -668,7 +769,7 @@ app.get('/api/albums', requireAuth, (req, res) => {
       id: a.id, name: a.name, parentId: a.parentId,
       ownerId: a.ownerId, ownerName: owner?.username ?? '?',
       description: locked ? '' : (a.description || ''), createdAt: a.createdAt,
-      photoCount: locked ? 0 : db.photos.filter(p => p.albumId === a.id).length,
+      photoCount: locked ? 0 : db.photos.filter(p => photoInAlbum(p, a.id)).length,
       coverPhotoId: locked ? null : (a.coverPhotoId || null),
       hidden: !!a.hidden, effectiveHidden: hid, hiddenRootId: hid ? hiddenRootFor(db, a.id) : null, locked,
       canUpload: canUploadToAlbum(db, req.session.userId, a.id),
@@ -770,6 +871,8 @@ app.delete('/api/albums/:id', requireAuth, (req, res) => {
   if (!canManageAlbum(db, req.session.userId, req.params.id)) return res.status(403).json({ error: 'No permission' });
   const toDelete = [req.params.id, ...descendantAlbumIds(db, req.params.id)];
   db.photos = db.photos.filter(p => {
+    // Clean up links pointing to deleted albums
+    if (Array.isArray(p.linkedAlbumIds)) p.linkedAlbumIds = p.linkedAlbumIds.filter(a => !toDelete.includes(a));
     if (!toDelete.includes(p.albumId)) return true;
     [path.join(PHOTOS_DIR, `${p.id}.enc`), path.join(THUMBS_DIR, `${p.id}.enc`)].forEach(f => { try { fs.unlinkSync(f); } catch {} });
     return false;
@@ -805,12 +908,26 @@ app.post('/api/photos/upload', requireAuth, requireDEK, (req, res) => {
       try {
         const isVideo = file.mimetype.startsWith('video/');
         const photoId = uid();
-        const e1 = encryptGCM(file.buffer, key);
-        fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), e1.data);
         const rec = { id: photoId, albumId, ownerId: req.session.userId,
           originalName: file.originalname, mimeType: file.mimetype, size: file.size, uploadedAt: Date.now(),
-          encryption: enc, iv: e1.iv, tag: e1.tag,
+          encryption: enc,
           shared: false, views: 0, downloads: 0, viewLog: [] };
+        if (isVideo) {
+          const ec = encryptChunked(file.buffer, key, photoId);
+          fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), ec.data);
+          rec.encFormat = 'chunked'; rec.chunkSize = CHUNK_SIZE;
+          rec.chunkCount = ec.chunkCount; rec.plainSize = ec.plainSize;
+          const poster = extractVideoPoster(file.buffer);
+          if (poster) {
+            const e2 = encryptGCM(poster, key);
+            fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
+            rec.thumbIv = e2.iv; rec.thumbTag = e2.tag;
+          }
+        } else {
+          const e1 = encryptGCM(file.buffer, key);
+          fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), e1.data);
+          rec.iv = e1.iv; rec.tag = e1.tag;
+        }
         if (!isVideo) {
           const thumbBuffer = await sharp(file.buffer).resize(400, 400, { fit: 'cover', position: 'centre' }).jpeg({ quality: 75 }).toBuffer();
           const e2 = encryptGCM(thumbBuffer, key);
@@ -834,9 +951,11 @@ app.get('/api/albums/:albumId/photos', requireAuth, (req, res) => {
   const mapPhoto = p => {
     const owner = db.users.find(u => u.id === p.ownerId);
     const keyInfo = resolveReadKey(db, p, req);
-    return { id: p.id, albumId: p.albumId, originalName: p.originalName, uploadedAt: p.uploadedAt, size: p.size,
+    return { id: p.id, albumId: p.albumId, linkedHere: p.albumId !== albumId, originalName: p.originalName, uploadedAt: p.uploadedAt, size: p.size,
       ownerId: p.ownerId, ownerName: owner?.username ?? '?', shared: p.shared || false,
       mimeType: p.mimeType || 'image/jpeg',
+      streamable: p.encFormat === 'chunked',
+      hasThumb: !!p.thumbIv,
       pending: !!keyInfo.pending,
       canDownload: p.ownerId === req.session.userId && me.type !== 'observer',
       canShare: p.ownerId === req.session.userId && me.type !== 'observer' };
@@ -845,7 +964,69 @@ app.get('/api/albums/:albumId/photos', requireAuth, (req, res) => {
   if (!canViewAlbum(db, req.session.userId, albumId)) return res.status(403).json({ error: 'No access to album' });
   if (effectiveHidden(db, albumId) && !isUnlocked(req, db, albumId))
     return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
-  res.json(db.photos.filter(p => p.albumId === albumId).map(mapPhoto).sort((a, b) => b.uploadedAt - a.uploadedAt));
+  res.json(db.photos.filter(p => photoInAlbum(p, albumId)).map(mapPhoto).sort((a, b) => b.uploadedAt - a.uploadedAt));
+});
+
+// Link one photo into multiple albums (Variant A: same key context only)
+app.put('/api/photos/:id/links', requireAuth, (req, res) => {
+  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+  const { albumIds } = req.body;
+  if (!Array.isArray(albumIds)) return res.status(400).json({ error: 'albumIds array required' });
+  const db = loadDB();
+  const photo = db.photos.find(p => p.id === req.params.id);
+  if (!photo) return res.status(404).json({ error: 'Photo not found' });
+  const me = getUser(db, req);
+  if (photo.ownerId !== req.session.userId && me.type !== 'admin') return res.status(403).json({ error: 'Not your photo' });
+  const homeCtx = albumKeyContext(db, photo.albumId);
+  const clean = [];
+  for (const aid of albumIds) {
+    if (aid === photo.albumId) continue;                        // home album is implicit
+    const alb = db.albums.find(a => a.id === aid);
+    if (!alb) return res.status(404).json({ error: 'Target album not found' });
+    if (!canUploadToAlbum(db, req.session.userId, aid)) return res.status(403).json({ error: 'No permission for a target album' });
+    if (albumKeyContext(db, aid) !== homeCtx) return res.status(409).json({ error: 'Album has a different sharing context', code: 'CTX_MISMATCH' });
+    if (!clean.includes(aid)) clean.push(aid);
+  }
+  photo.linkedAlbumIds = clean;
+  saveDB(db);
+  res.json({ success: true, linkedAlbumIds: clean });
+});
+
+// Bulk: link several photos into one album
+app.put('/api/photos/links', requireAuth, (req, res) => {
+  const { photoIds, targetAlbumId } = req.body;
+  if (!Array.isArray(photoIds) || !targetAlbumId) return res.status(400).json({ error: 'photoIds and targetAlbumId required' });
+  const db = loadDB();
+  const me = getUser(db, req);
+  if (!canUploadToAlbum(db, req.session.userId, targetAlbumId)) return res.status(403).json({ error: 'No permission for target album' });
+  if (effectiveHidden(db, targetAlbumId) && !isUnlocked(req, db, targetAlbumId)) return res.status(423).json({ error: 'Target album locked', code: 'LOCKED' });
+  const targetCtx = albumKeyContext(db, targetAlbumId);
+  let linked = 0, skipped = 0;
+  for (const pid of photoIds) {
+    const photo = db.photos.find(p => p.id === pid);
+    if (!photo) { skipped++; continue; }
+    if (photo.ownerId !== req.session.userId && me.type !== 'admin') { skipped++; continue; }
+    if (photo.albumId === targetAlbumId) { skipped++; continue; }
+    if (albumKeyContext(db, photo.albumId) !== targetCtx) { skipped++; continue; }
+    photo.linkedAlbumIds = photo.linkedAlbumIds || [];
+    if (!photo.linkedAlbumIds.includes(targetAlbumId)) { photo.linkedAlbumIds.push(targetAlbumId); linked++; }
+    else skipped++;
+  }
+  if (linked) saveDB(db);
+  res.json({ success: true, linked, skipped });
+});
+
+// Remove a link (unlink) – photo stays in its home album
+app.delete('/api/photos/:id/links/:albumId', requireAuth, (req, res) => {
+  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+  const db = loadDB();
+  const photo = db.photos.find(p => p.id === req.params.id);
+  if (!photo) return res.status(404).json({ error: 'Photo not found' });
+  const me = getUser(db, req);
+  if (photo.ownerId !== req.session.userId && me.type !== 'admin') return res.status(403).json({ error: 'Not your photo' });
+  photo.linkedAlbumIds = (photo.linkedAlbumIds || []).filter(a => a !== req.params.albumId);
+  saveDB(db);
+  res.json({ success: true });
 });
 
 app.put('/api/photos/:id/move', requireAuth, (req, res) => {
@@ -865,6 +1046,11 @@ app.put('/api/photos/:id/move', requireAuth, (req, res) => {
 
   const oldAlbumId = photo.albumId;
   photo.albumId = targetAlbumId;
+  // Moving changes the key context → drop links that would now be incompatible
+  if (Array.isArray(photo.linkedAlbumIds) && photo.linkedAlbumIds.length) {
+    const newCtx = albumKeyContext(db, targetAlbumId);
+    photo.linkedAlbumIds = photo.linkedAlbumIds.filter(aid => aid !== targetAlbumId && albumKeyContext(db, aid) === newCtx);
+  }
 
   // Re-encryption needed if the target's sharing context differs from current encryption
   const needsShared = albumIsGranted(db, targetAlbumId);
@@ -919,6 +1105,84 @@ app.get('/api/photos/:id/thumb', requireAuth, (req, res) => {
 });
 
 // Full-resolution view (same access rules as thumb; for lightbox display)
+// Range-based streaming for chunked videos (206 Partial Content)
+app.get('/api/photos/:id/stream', requireAuth, (req, res) => {
+  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+  const db = loadDB();
+  const photo = db.photos.find(p => p.id === req.params.id);
+  if (!photo) return res.status(404).json({ error: 'Not found' });
+  const me = getUser(db, req);
+  const canView = (photo.shared && me.type !== 'observer') || canViewAlbum(db, req.session.userId, photo.albumId);
+  if (!canView) return res.status(403).json({ error: 'No access' });
+  if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId))
+    return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
+  const referer = req.headers['referer'] || req.headers['origin'] || '';
+  if (referer && !referer.includes(req.headers['host'] || '')) return res.status(403).json({ error: 'Direct access not permitted' });
+  if (photo.encFormat !== 'chunked') return res.status(409).json({ error: 'Not streamable' });
+  const keyInfo = resolveReadKey(db, photo, req);
+  if (keyInfo.pending) return res.status(423).json({ error: 'Pending', code: 'PENDING' });
+  if (keyInfo.denied) return res.status(401).json({ error: 'Session key missing', code: 'DEK_MISSING' });
+  const f = path.join(PHOTOS_DIR, `${photo.id}.enc`);
+  if (!fs.existsSync(f)) return res.status(404).json({ error: 'File not found' });
+
+  const total = photo.plainSize;
+  let start = 0, end = total - 1, partial = false;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (m) {
+    partial = true;
+    if (m[1] !== '') start = parseInt(m[1], 10);
+    if (m[2] !== '') end = parseInt(m[2], 10);
+    else if (m[1] === '') { start = Math.max(0, total - 1); end = total - 1; }
+    if (isNaN(start) || isNaN(end) || start > end || start >= total)
+      return res.status(416).set('Content-Range', `bytes */${total}`).end();
+    end = Math.min(end, total - 1);
+  }
+  res.status(partial ? 206 : 200);
+  res.set('Content-Type', photo.mimeType || 'video/mp4');
+  res.set('Accept-Ranges', 'bytes');
+  res.set('Content-Length', String(end - start + 1));
+  if (partial) res.set('Content-Range', `bytes ${start}-${end}/${total}`);
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('X-Content-Type-Options', 'nosniff');
+
+  const fd = fs.openSync(f, 'r');
+  try {
+    const firstChunk = Math.floor(start / CHUNK_SIZE);
+    const lastChunk = Math.floor(end / CHUNK_SIZE);
+    for (let i = firstChunk; i <= lastChunk; i++) {
+      const plain = readDecryptedChunk(fd, photo, keyInfo.key, i);
+      const chunkStart = i * CHUNK_SIZE;
+      const from = Math.max(0, start - chunkStart);
+      const to = Math.min(plain.length, end - chunkStart + 1);
+      res.write(plain.subarray(from, to));
+    }
+    res.end();
+  } catch (e) {
+    console.error('Stream error:', photo.id, e.message);
+    try { res.end(); } catch {}
+  } finally { fs.closeSync(fd); }
+});
+
+// Dedicated view counter – called exactly once when the lightbox opens
+app.post('/api/photos/:id/view', requireAuth, (req, res) => {
+  if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+  const db = loadDB();
+  const photo = db.photos.find(p => p.id === req.params.id);
+  if (!photo) return res.status(404).json({ error: 'Not found' });
+  const me = getUser(db, req);
+  const canView = (photo.shared && me.type !== 'observer') || canViewAlbum(db, req.session.userId, photo.albumId);
+  if (!canView) return res.status(403).json({ error: 'No access' });
+  if (effectiveHidden(db, photo.albumId) && !isUnlocked(req, db, photo.albumId))
+    return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
+  // Owner excluded, 10-minute dedup per user
+  if (photo.ownerId !== req.session.userId) {
+    const tenMinAgo = Date.now() - 600000;
+    const recent = (photo.viewLog || []).find(e => e.userId === req.session.userId && e.ts > tenMinAgo);
+    if (!recent) { trackPhotoView(db, photo.id, req.session.userId); saveDB(db); }
+  }
+  res.json({ success: true });
+});
+
 app.get('/api/photos/:id/full', requireAuth, (req, res) => {
   if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
   const db = loadDB();
@@ -937,15 +1201,10 @@ app.get('/api/photos/:id/full', requireAuth, (req, res) => {
   const f = path.join(PHOTOS_DIR, `${photo.id}.enc`);
   if (!fs.existsSync(f)) return res.status(404).json({ error: 'File not found' });
   try {
-    // View-Tracking: nur Lightbox-Ansichten zählen, eigene Fotos ausgenommen
-    if (photo.ownerId !== req.session.userId) {
-      const tenMinAgo = Date.now() - 600000;
-      const recent = (photo.viewLog || []).find(e => e.userId === req.session.userId && e.ts > tenMinAgo);
-      if (!recent) { trackPhotoView(db, photo.id, req.session.userId); saveDB(db); }
-    }
     res.set('Content-Type', photo.mimeType || 'image/jpeg');
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('X-Content-Type-Options', 'nosniff');
+    if (photo.encFormat === 'chunked') { res.send(decryptChunkedAll(f, photo, keyInfo.key)); return; }
     res.send(decryptPhotoFile(f, photo, keyInfo, 'photo'));
   } catch (e) { console.error('Full view error:', e.message); res.status(500).json({ error: 'Decryption failed' }); }
 });
@@ -998,7 +1257,9 @@ app.get('/api/export', requireAuth, requireDEK, (req, res) => {
       else if (p.encryption === 'family') key = fam;
       else key = dek;
       if (p.encryption && !key) continue;
-      const plain = p.encryption ? decryptGCM(fs.readFileSync(f), key, p.iv, p.tag) : decryptLegacyCBC(fs.readFileSync(f), p.iv);
+      let plain;
+      if (p.encFormat === 'chunked') plain = decryptChunkedAll(f, p, key);
+      else plain = p.encryption ? decryptGCM(fs.readFileSync(f), key, p.iv, p.tag) : decryptLegacyCBC(fs.readFileSync(f), p.iv);
       const dir = albumPath(p.albumId);
       archive.append(plain, { name: (dir ? dir + '/' : '') + p.originalName });
       exported++;
@@ -1059,7 +1320,7 @@ app.get('/api/stats', requireMainUser, (req, res) => {
   });
   const topAlbums = db.albums.filter(a => (a.views || 0) > 0).sort((a, b) => b.views - a.views).slice(0, 10).map(a => ({
     id: a.id, name: a.name, views: a.views || 0,
-    photoCount: db.photos.filter(p => p.albumId === a.id).length,
+    photoCount: db.photos.filter(p => photoInAlbum(p, a.id)).length,
     ownerName: db.users.find(u => u.id === a.ownerId)?.username ?? '?' }));
   const vpu = {};
   db.photos.forEach(p => (p.viewLog || []).forEach(e => { vpu[e.userId] = (vpu[e.userId] || 0) + 1; }));
