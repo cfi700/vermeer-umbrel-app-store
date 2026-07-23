@@ -617,7 +617,7 @@
     <div class="lb-img-overlay" id="lb-img-overlay"></div>
   <canvas id="lightbox-img" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 24px 80px rgba(0,0,0,.8);display:block"></canvas>
   <video id="lb-video" controls playsinline controlsList="nodownload" disablepictureinpicture
-    style="display:none;max-width:100%;max-height:calc(100vh - 100px);border-radius:6px;box-shadow:0 24px 80px rgba(0,0,0,.8)"></video>
+    style="display:none;max-width:min(100%,800px);max-height:min(calc(100vh - 100px),800px);border-radius:6px;box-shadow:0 24px 80px rgba(0,0,0,.8)"></video>
     <button class="lb-arrow right" id="lb-next" onclick="lbNavigate(1)">&#8250;</button>
   </div>
   <div class="lb-strip" id="lb-strip"></div>
@@ -842,6 +842,7 @@ const T = {
     'login.err.invalid':'Ungültige Anmeldedaten','login.err.connection':'Verbindungsfehler',
     'nav.albums':'Alben','nav.users':'Benutzer','nav.account':'Konto',
     'nav.logout':'Abmelden','nav.loggedinas':'Angemeldet als',
+    'nav.back_exit':'Erneut drücken zum Verlassen',
     'albums.title':'Fotoalben','albums.new_root':'+ Neues Album',
     'albums.sidebar_title':'Alben','albums.select_hint':'Wähle ein Album aus der Seitenleiste',
     'albums.new_sub':'+ Unteralbum','albums.rename':'Umbenennen','albums.delete':'Löschen',
@@ -983,6 +984,7 @@ const T = {
     'login.err.invalid':'Invalid credentials','login.err.connection':'Connection error',
     'nav.albums':'Albums','nav.users':'Users','nav.account':'Account',
     'nav.logout':'Sign Out','nav.loggedinas':'Signed in as',
+    'nav.back_exit':'Press back again to exit',
     'albums.title':'Photo Albums','albums.new_root':'+ New Album',
     'albums.sidebar_title':'Albums','albums.select_hint':'Select an album from the sidebar',
     'albums.new_sub':'+ Sub-Album','albums.rename':'Rename','albums.delete':'Delete',
@@ -1282,39 +1284,57 @@ async function checkSession(){
     bootApp();
   }catch{}
 }
-// ── Android/Browser Zurück-Navigation ────────────────────────
-// Prinzip: Beim Öffnen von Album/Lightbox pushen wir einen History-State.
-// Der Hardware-Zurück-Button löst 'popstate' aus → wir navigieren in der
-// App zurück, statt den Tab zu verlassen.
-let navReady=false;
+// ── Android/Browser Zurück-Navigation (Guard-Pattern, v1.9.7) ────────
+// Genau EIN Guard-Eintrag liegt permanent oben auf dem History-Stack.
+// Jeder Hardware-Zurück-Druck (popstate) führt genau einen In-App-Schritt
+// aus (Lightbox → Modal → Album-Ebene hoch) und legt den Guard sofort
+// wieder nach. Die App-Navigationstiefe wird NICHT mehr im History-Stack
+// abgebildet (kein pushState beim Album-/Lightbox-Öffnen) – damit können
+// Stack und App-Zustand nie auseinanderlaufen (Ursache des 1.9.4-Bugs,
+// bei dem jeder 2. Zurück-Druck die App verließ).
+// Startansicht: erster Druck zeigt einen Hinweis, ein zweiter Druck
+// innerhalb von 2 Sekunden verlässt die App wirklich.
+let navReady=false,navExitArmed=false;
 function setupBackNav(){
   if(navReady)return; navReady=true;
-  // Basis-State, damit der erste Zurück-Druck abgefangen werden kann
-  history.replaceState({v:'root'},'');
+  history.replaceState({v:'base'},'');
+  history.pushState({v:'guard'},'');
   window.addEventListener('popstate',()=>{
-    // 1) Lightbox offen → nur schließen
-    if(document.getElementById('lightbox').classList.contains('open')){
-      closeLightbox();
-      pushAppState();   // State wieder auffüllen, damit erneutes Zurück wirkt
+    if(handleInAppBack()){
+      navExitArmed=false;
+      history.pushState({v:'guard'},'');   // Guard sofort wieder auflegen
       return;
     }
-    // 2) Modal offen → schließen
-    const openModal=document.querySelector('.modal-backdrop.open, #stat-preview-backdrop.open');
-    if(openModal){openModal.classList.remove('open');pushAppState();return;}
-    // 3) In einem Album → ein Album hoch (bzw. Home)
-    if(currentAlbumId){
-      const cur=allAlbums.find(a=>a.id===currentAlbumId);
-      if(cur&&cur.parentId)selectAlbum(cur.parentId);else goHome();
-      pushAppState();
-      return;
+    // Startansicht erreicht → Verlassen nur nach doppeltem Druck
+    if(!navExitArmed){
+      navExitArmed=true;
+      history.pushState({v:'guard'},'');   // noch eine Chance geben
+      toast(t('nav.back_exit'));
+      setTimeout(()=>{navExitArmed=false;},2000);
+    }else{
+      history.back();   // Basis-Eintrag verlassen → App/Tab wird beendet
     }
-    // 4) Auf Home-Ebene → App darf normal verlassen werden (nichts tun,
-    //    der Browser navigiert dann tatsächlich zurück/schließt)
   });
 }
-function pushAppState(){
-  if(!navReady)return;
-  history.pushState({v:'app',album:currentAlbumId||null,ts:Date.now()},'');
+// Führt genau EINEN In-App-Zurück-Schritt aus (oberste UI-Schicht zuerst).
+// Rückgabe false = Startansicht, nichts mehr zu schließen.
+function handleInAppBack(){
+  // 1) Lightbox offen → nur schließen
+  if(document.getElementById('lightbox').classList.contains('open')){
+    closeLightbox();return true;
+  }
+  // 2) Modal offen → schließen
+  const openModal=document.querySelector('.modal-backdrop.open, #stat-preview-backdrop.open');
+  if(openModal){openModal.classList.remove('open');return true;}
+  // 3) In einem Album → ein Album hoch (bzw. Home); Relock versteckter
+  //    Alben greift weiterhin, da dieselben Funktionen laufen wie bei
+  //    der Breadcrumb-Navigation (relockIfLeavingHidden).
+  if(currentAlbumId){
+    const cur=allAlbums.find(a=>a.id===currentAlbumId);
+    if(cur&&cur.parentId)selectAlbum(cur.parentId);else goHome();
+    return true;
+  }
+  return false;
 }
 
 // ── Auto-Logout ──────────────────────────────────────────────
@@ -1761,9 +1781,7 @@ async function selectAlbum(id){
   const a=allAlbums.find(x=>x.id===id);
   if(a&&a.locked){openPinModal(a);return;}
   await relockIfLeavingHidden(id);
-  const entering=id&&id!==currentAlbumId;
   currentAlbumId=id;selectedPhotos.clear();
-  if(entering)pushAppState();   // Zurück-Button springt ein Album hoch
   await loadAlbums();   // rendert bereits loadAlbumContent(currentAlbumId) – kein Doppel-Render
 }
 async function goHome(){
@@ -2208,27 +2226,105 @@ async function deleteSelected(){
 // ── UPLOAD ──────────────────────────────────────────────────────────
 document.getElementById('file-input').addEventListener('dragover',e=>{e.preventDefault();});
 
+// Cloudflare-Tunnel-sicher: kein einzelner Request überschreitet ~90 MB
+// (Cloudflare Free lehnt Request-Bodies >100 MB mit 413 ab).
+const UP_PART_SIZE=32*1024*1024;    // Teilgröße für große Dateien
+const UP_REQ_BUDGET=90*1024*1024;   // Byte-Budget pro Einzel-Request
+
 async function handleFiles(files){
   if(!files.length||!currentAlbumId)return;
+  const albumId=currentAlbumId;
   const prog=document.getElementById('upload-progress');
   const bar=document.getElementById('progress-bar');
   const stat=document.getElementById('upload-status');
   if(!prog)return;
-  prog.classList.add('visible');bar.style.width='15%';
+  prog.classList.add('visible');bar.style.width='2%';
   stat.textContent=t('upload.encrypting',files.length);
-  const form=new FormData();
-  for(const f of files)form.append('photos',f);
-  form.append('albumId',currentAlbumId);
+  const list=[...files];
+  const totalBytes=list.reduce((s,f)=>s+f.size,0)||1;
+  let doneBytes=0;
+  const onBytes=n=>{
+    doneBytes+=n;
+    bar.style.width=Math.min(100,Math.max(2,Math.round(doneBytes/totalBytes*100)))+'%';
+    resetIdleTimer();   // langer Upload soll nicht in den Auto-Logout laufen
+  };
+  // Kleine Dateien zu Batches bündeln, deren Gesamtgröße unter dem
+  // Request-Budget bleibt (auch viele kleine Fotos zusammen konnten
+  // bisher das 100-MB-Tunnel-Limit reißen); große Dateien einzeln in Teilen.
+  const small=list.filter(f=>f.size<=UP_REQ_BUDGET);
+  const large=list.filter(f=>f.size>UP_REQ_BUDGET);
+  const batches=[];let cur=[],curSize=0;
+  for(const f of small){
+    if(cur.length&&(curSize+f.size>UP_REQ_BUDGET||cur.length>=50)){batches.push(cur);cur=[];curSize=0;}
+    cur.push(f);curSize+=f.size;
+  }
+  if(cur.length)batches.push(cur);
+  const uploaded=[],errors=[];
   try{
-    bar.style.width='50%';
-    const r=await fetch('/api/photos/upload',{method:'POST',body:form});
+    for(const batch of batches){
+      const form=new FormData();
+      for(const f of batch)form.append('photos',f);
+      form.append('albumId',albumId);
+      try{
+        const r=await fetch('/api/photos/upload',{method:'POST',body:form});
+        const data=await r.json().catch(()=>null);
+        if(r.ok&&data){uploaded.push(...data.uploaded);errors.push(...data.errors);}
+        else errors.push(...batch.map(f=>f.name));
+      }catch{errors.push(...batch.map(f=>f.name));}
+      for(const f of batch)onBytes(f.size);
+    }
+    for(const f of large){
+      try{const up=await uploadChunked(f,albumId,onBytes);uploaded.push(up);}
+      catch(e){console.warn('Chunked upload failed:',f.name,e.message);errors.push(f.name);}
+    }
     bar.style.width='100%';
-    const data=await r.json();
-    if(r.ok){stat.textContent=t('upload.done',data.uploaded.length,data.errors.length);toast(t('upload.toast',data.uploaded.length),'success');loadAlbums();}
-    else{stat.textContent='Error: '+data.error;}
+    stat.textContent=t('upload.done',uploaded.length,errors.length);
+    if(uploaded.length)toast(t('upload.toast',uploaded.length),'success');
+    loadAlbums();
     setTimeout(()=>{prog.classList.remove('visible');bar.style.width='0';},4000);
     document.getElementById('file-input').value='';
   }catch{if(stat)stat.textContent=t('upload.fail');}
+}
+
+// Große Datei in Teilen hochladen: init → part×n (mit Retry) → finish.
+// Bei Fehlern wird der serverseitige Zwischenstand per cancel aufgeräumt.
+async function uploadChunked(file,albumId,onBytes){
+  const partSize=UP_PART_SIZE,partCount=Math.ceil(file.size/partSize);
+  const ir=await fetch('/api/photos/upload-init',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({albumId,fileName:file.name,mimeType:file.type,size:file.size,partSize})});
+  const init=await ir.json().catch(()=>({}));
+  if(!ir.ok)throw new Error(init.error||'init failed');
+  const uploadId=init.uploadId;
+  try{
+    for(let i=0;i<partCount;i++){
+      const blob=file.slice(i*partSize,Math.min((i+1)*partSize,file.size));
+      let ok=false,lastErr='';
+      for(let attempt=0;attempt<3&&!ok;attempt++){   // wackliges Mobilnetz: bis zu 3 Versuche je Teil
+        try{
+          const fd=new FormData();
+          fd.append('uploadId',uploadId);
+          fd.append('index',String(i));
+          fd.append('part',blob,'part');
+          const pr=await fetch('/api/photos/upload-part',{method:'POST',body:fd});
+          if(pr.ok)ok=true;
+          else lastErr=((await pr.json().catch(()=>({}))).error)||('HTTP '+pr.status);
+        }catch(e){lastErr=e.message;}
+        if(!ok)await new Promise(r=>setTimeout(r,1500*(attempt+1)));
+      }
+      if(!ok)throw new Error(lastErr||'part failed');
+      onBytes(blob.size);
+    }
+    const fr=await fetch('/api/photos/upload-finish',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({uploadId})});
+    const fin=await fr.json().catch(()=>({}));
+    if(!fr.ok)throw new Error(fin.error||'finish failed');
+    return fin.uploaded[0];
+  }catch(e){
+    fetch('/api/photos/upload-cancel',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({uploadId})}).catch(()=>{});
+    throw e;
+  }
 }
 
 // ── THUMBS ──────────────────────────────────────────────────────────
@@ -2268,12 +2364,16 @@ async function loadThumb(id,idx){
 // ═══════════════════════════════════════════════════════════════════
 function openLightbox(idx){
   lbPhotos=currentPhotos;lbIndex=idx;
-  pushAppState();   // Zurück-Button schließt zuerst die Lightbox
   document.getElementById('lightbox').classList.add('open');
   renderLightbox();
   buildStrip();
 }
 
+// Anzeige-Limits der Lightbox (längste Kante in CSS-Pixeln, Aspect Ratio
+// bleibt immer erhalten). Video-Limit wird zusätzlich im Inline-Style des
+// <video id="lb-video">-Elements gespiegelt (800px).
+const LB_MAX_PHOTO_PX=1200;
+const LB_MAX_VIDEO_PX=800;
 function renderLightbox(){
   const p=lbPhotos[lbIndex];if(!p)return;
   // View exakt einmal pro Öffnung zählen (Server dedupliziert zusätzlich 10 Min)
@@ -2290,6 +2390,10 @@ function renderLightbox(){
   if(p.mimeType&&p.mimeType.startsWith('video/')){
     canvas.style.display='none';
     vid.style.display='block';
+    // Längste Kante auf LB_MAX_VIDEO_PX begrenzen; das <video>-Element
+    // erhält das Aspect Ratio innerhalb der max-Grenzen selbst
+    vid.style.maxWidth=`min(100%,${LB_MAX_VIDEO_PX}px)`;
+    vid.style.maxHeight=`min(calc(100vh - 100px),${LB_MAX_VIDEO_PX}px)`;
     if(vid._url){URL.revokeObjectURL(vid._url);vid._url=null;}
     if(p.streamable){
       // Echtes Streaming: Browser holt sich Byte-Ranges selbst (sofortiger Start, Spulen)
@@ -2317,10 +2421,11 @@ function renderLightbox(){
   function drawOnCanvas(blobUrl){
     const tmpImg=new Image();
     tmpImg.onload=()=>{
-      // Size canvas to fit viewport
-      const maxW=window.innerWidth;
-      const maxH=window.innerHeight-90;   // Filmstreifen unten
-      const scale=Math.min(maxW/tmpImg.width,maxH/tmpImg.height);   // auch hochskalieren
+      // Size canvas to fit viewport, aber maximal LB_MAX_PHOTO_PX auf der
+      // längsten Kante (Aspect Ratio bleibt durch den min-Scale erhalten)
+      const maxW=Math.min(window.innerWidth,LB_MAX_PHOTO_PX);
+      const maxH=Math.min(window.innerHeight-90,LB_MAX_PHOTO_PX);   // Filmstreifen unten
+      const scale=Math.min(maxW/tmpImg.width,maxH/tmpImg.height);   // auch hochskalieren (bis max. Limit)
       canvas.width=tmpImg.width*scale;
       canvas.height=tmpImg.height*scale;
       ctx.drawImage(tmpImg,0,0,canvas.width,canvas.height);

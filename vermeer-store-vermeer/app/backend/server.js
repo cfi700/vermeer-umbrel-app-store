@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.9.6';
+const APP_VERSION = '1.10.0';
 
 const DATA_DIR     = process.env.DATA_DIR || '/data';
 const PHOTOS_DIR   = path.join(DATA_DIR, 'photos');
@@ -883,10 +883,43 @@ app.delete('/api/albums/:id', requireAuth, (req, res) => {
 });
 
 // ═══ UPLOAD ═══════════════════════════════════════════════════════
+// Verarbeitet eine empfangene Datei (Buffer im RAM) vollständig:
+// Video → chunked vmr1 + ffmpeg-Poster, Bild → GCM + sharp-Thumbnail.
+// Wird vom klassischen Upload UND vom Chunked-Upload-Finish genutzt.
+async function storeIncomingFile(db, file, albumId, ownerId, key, enc) {
+  const isVideo = file.mimetype.startsWith('video/');
+  const photoId = uid();
+  const rec = { id: photoId, albumId, ownerId,
+    originalName: file.originalname, mimeType: file.mimetype, size: file.size, uploadedAt: Date.now(),
+    encryption: enc,
+    shared: false, views: 0, downloads: 0, viewLog: [] };
+  if (isVideo) {
+    const ec = encryptChunked(file.buffer, key, photoId);
+    fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), ec.data);
+    rec.encFormat = 'chunked'; rec.chunkSize = CHUNK_SIZE;
+    rec.chunkCount = ec.chunkCount; rec.plainSize = ec.plainSize;
+    const poster = extractVideoPoster(file.buffer);
+    if (poster) {
+      const e2 = encryptGCM(poster, key);
+      fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
+      rec.thumbIv = e2.iv; rec.thumbTag = e2.tag;
+    }
+  } else {
+    const e1 = encryptGCM(file.buffer, key);
+    fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), e1.data);
+    rec.iv = e1.iv; rec.tag = e1.tag;
+    const thumbBuffer = await sharp(file.buffer).resize(400, 400, { fit: 'cover', position: 'centre' }).jpeg({ quality: 75 }).toBuffer();
+    const e2 = encryptGCM(thumbBuffer, key);
+    fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
+    rec.thumbIv = e2.iv; rec.thumbTag = e2.tag;
+  }
+  return rec;
+}
+
 app.post('/api/photos/upload', requireAuth, requireDEK, (req, res) => {
   upload.array('photos', 50)(req, res, async (err) => {
     if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large (max 50 MB)' });
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large (max 200 MB)' });
       if (err.code === 'LIMIT_FILE_COUNT') return res.status(400).json({ error: 'Too many files (max 50)' });
       return res.status(400).json({ error: err.message });
     }
@@ -906,41 +939,143 @@ app.post('/api/photos/upload', requireAuth, requireDEK, (req, res) => {
     const uploaded = [], errors = [];
     for (const file of req.files) {
       try {
-        const isVideo = file.mimetype.startsWith('video/');
-        const photoId = uid();
-        const rec = { id: photoId, albumId, ownerId: req.session.userId,
-          originalName: file.originalname, mimeType: file.mimetype, size: file.size, uploadedAt: Date.now(),
-          encryption: enc,
-          shared: false, views: 0, downloads: 0, viewLog: [] };
-        if (isVideo) {
-          const ec = encryptChunked(file.buffer, key, photoId);
-          fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), ec.data);
-          rec.encFormat = 'chunked'; rec.chunkSize = CHUNK_SIZE;
-          rec.chunkCount = ec.chunkCount; rec.plainSize = ec.plainSize;
-          const poster = extractVideoPoster(file.buffer);
-          if (poster) {
-            const e2 = encryptGCM(poster, key);
-            fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
-            rec.thumbIv = e2.iv; rec.thumbTag = e2.tag;
-          }
-        } else {
-          const e1 = encryptGCM(file.buffer, key);
-          fs.writeFileSync(path.join(PHOTOS_DIR, `${photoId}.enc`), e1.data);
-          rec.iv = e1.iv; rec.tag = e1.tag;
-        }
-        if (!isVideo) {
-          const thumbBuffer = await sharp(file.buffer).resize(400, 400, { fit: 'cover', position: 'centre' }).jpeg({ quality: 75 }).toBuffer();
-          const e2 = encryptGCM(thumbBuffer, key);
-          fs.writeFileSync(path.join(THUMBS_DIR, `${photoId}.enc`), e2.data);
-          rec.thumbIv = e2.iv; rec.thumbTag = e2.tag;
-        }
+        const rec = await storeIncomingFile(db, file, albumId, req.session.userId, key, enc);
         db.photos.push(rec);
-        uploaded.push({ id: photoId, name: file.originalname });
+        uploaded.push({ id: rec.id, name: file.originalname });
         file.buffer = null;
       } catch (e) { console.error('Upload error', file.originalname, e.message); errors.push(file.originalname); }
     }
     saveDB(db); res.json({ uploaded, errors });
   });
+});
+
+// ═══ CHUNKED UPLOAD (1.10.0) ══════════════════════════════════════
+// Umgeht Request-Body-Limits von Reverse-Proxies und Tunneln (z. B.
+// 100 MB pro Request bei Cloudflare Free): Der Client zerlegt große
+// Dateien in Teile, lädt sie einzeln hoch, der Server setzt sie
+// zusammen und verarbeitet sie danach über die NORMALE Pipeline
+// (storeIncomingFile → Verschlüsselung, Poster/Thumbnail).
+// Sicherheitshinweis (ehrlich): Während des Uploads liegen die noch
+// unverschlüsselten Teile als Temp-Datei in /tmp im Container – NICHT
+// im persistierten data-Volume. Gelöscht wird bei Finish, Cancel,
+// Fehler und per Janitor (TTL 2 h, überlebt auch Server-Neustarts).
+const PARTS_DIR = path.join(os.tmpdir(), 'vermeer-parts');
+fs.mkdirSync(PARTS_DIR, { recursive: true });
+const MAX_UPLOAD_SIZE = 200 * 1024 * 1024;   // wie multer-Limit
+const MAX_PART_SIZE = 95 * 1024 * 1024;      // sicher unter Cloudflares 100 MB
+const MAX_PENDING_PER_USER = 4;
+const PENDING_TTL = 2 * 3600 * 1000;
+const pendingUploads = new Map();            // uploadId → Meta (nur RAM)
+
+function cleanupPending(uploadId) {
+  const u = pendingUploads.get(uploadId);
+  if (!u) return;
+  pendingUploads.delete(uploadId);
+  try { fs.unlinkSync(u.path); } catch {}
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, u] of pendingUploads) if (now - u.createdAt > PENDING_TTL) cleanupPending(id);
+  // Waisen-Dateien (z. B. nach Server-Neustart, Map ist dann leer)
+  try {
+    for (const f of fs.readdirSync(PARTS_DIR)) {
+      const fp = path.join(PARTS_DIR, f);
+      try { if (now - fs.statSync(fp).mtimeMs > PENDING_TTL) fs.unlinkSync(fp); } catch {}
+    }
+  } catch {}
+}, 900000);
+
+app.post('/api/photos/upload-init', requireAuth, requireDEK, (req, res) => {
+  const { albumId, fileName, mimeType, size, partSize } = req.body || {};
+  const db = loadDB();
+  if (!albumId || !db.albums.find(a => a.id === albumId)) return res.status(404).json({ error: 'Album not found' });
+  if (!canUploadToAlbum(db, req.session.userId, albumId)) return res.status(403).json({ error: 'No upload permission' });
+  if (effectiveHidden(db, albumId) && !isUnlocked(req, db, albumId)) return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
+  const isImage = typeof mimeType === 'string' && mimeType.startsWith('image/');
+  const isVideo = typeof mimeType === 'string' && /^video\/(mp4|webm|quicktime)$/.test(mimeType);
+  if (!isImage && !isVideo) return res.status(400).json({ error: 'Images or videos (mp4/webm/mov) only' });
+  if (!Number.isInteger(size) || size < 1 || size > MAX_UPLOAD_SIZE) return res.status(400).json({ error: 'File too large (max 200 MB)' });
+  if (!Number.isInteger(partSize) || partSize < 1024 * 1024 || partSize > MAX_PART_SIZE) return res.status(400).json({ error: 'Invalid part size' });
+  let mine = 0;
+  for (const u of pendingUploads.values()) if (u.userId === req.session.userId) mine++;
+  if (mine >= MAX_PENDING_PER_USER) return res.status(429).json({ error: 'Too many pending uploads' });
+  const uploadId = uid();
+  const meta = {
+    userId: req.session.userId, albumId,
+    fileName: String(fileName || 'upload').slice(0, 200), mimeType,
+    size, partSize, partCount: Math.ceil(size / partSize),
+    received: new Set(), path: path.join(PARTS_DIR, `${uploadId}.part`),
+    createdAt: Date.now()
+  };
+  fs.writeFileSync(meta.path, Buffer.alloc(0));
+  pendingUploads.set(uploadId, meta);
+  res.json({ uploadId, partCount: meta.partCount });
+});
+
+const partUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_PART_SIZE, files: 1 } });
+app.post('/api/photos/upload-part', requireAuth, (req, res) => {
+  partUpload.single('part')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    const { uploadId, index } = req.body || {};
+    if (!ID_RE.test(String(uploadId || ''))) return res.status(400).json({ error: 'Invalid uploadId' });
+    const u = pendingUploads.get(uploadId);
+    if (!u || u.userId !== req.session.userId) return res.status(404).json({ error: 'Upload not found' });
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= u.partCount) return res.status(400).json({ error: 'Invalid part index' });
+    if (!req.file) return res.status(400).json({ error: 'No part received' });
+    const expected = (idx === u.partCount - 1) ? (u.size - idx * u.partSize) : u.partSize;
+    if (req.file.size !== expected) return res.status(400).json({ error: 'Part size mismatch' });
+    try {
+      const fd = fs.openSync(u.path, 'r+');
+      try { fs.writeSync(fd, req.file.buffer, 0, req.file.size, idx * u.partSize); }
+      finally { fs.closeSync(fd); }
+    } catch (e) {
+      // z. B. Teil-Datei vom Janitor entfernt (TTL) oder /tmp voll
+      console.error('upload-part write error', uploadId, e.message);
+      cleanupPending(uploadId);
+      return res.status(500).json({ error: 'Part write failed' });
+    }
+    u.received.add(idx);          // Retry desselben Teils ist idempotent
+    u.createdAt = Date.now();     // TTL bei Aktivität verlängern
+    res.json({ received: u.received.size, partCount: u.partCount });
+  });
+});
+
+app.post('/api/photos/upload-finish', requireAuth, requireDEK, async (req, res) => {
+  const { uploadId } = req.body || {};
+  if (!ID_RE.test(String(uploadId || ''))) return res.status(400).json({ error: 'Invalid uploadId' });
+  const u = pendingUploads.get(uploadId);
+  if (!u || u.userId !== req.session.userId) return res.status(404).json({ error: 'Upload not found' });
+  if (u.received.size !== u.partCount) return res.status(400).json({ error: `Missing parts (${u.received.size}/${u.partCount})` });
+  const db = loadDB();
+  // Berechtigungen erneut prüfen – zwischen init und finish kann Zeit vergehen
+  if (!db.albums.find(a => a.id === u.albumId)) { cleanupPending(uploadId); return res.status(404).json({ error: 'Album not found' }); }
+  if (!canUploadToAlbum(db, req.session.userId, u.albumId)) { cleanupPending(uploadId); return res.status(403).json({ error: 'No upload permission' }); }
+  if (effectiveHidden(db, u.albumId) && !isUnlocked(req, db, u.albumId)) return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
+  const dek = dekCache.get(req.sessionID);
+  let fam = familyCache.get(req.sessionID);
+  if (!fam && albumIsFamilyGranted(db, u.albumId)) { const me = getUser(db, req); fam = ensureFamilyKey(db, me, dek); if (fam) familyCache.set(req.sessionID, fam); }
+  const { key, enc } = uploadKeyFor(db, u.albumId, dek, fam);
+  try {
+    const buffer = fs.readFileSync(u.path);
+    if (buffer.length !== u.size) { cleanupPending(uploadId); return res.status(400).json({ error: 'Assembled size mismatch' }); }
+    const rec = await storeIncomingFile(db, { buffer, originalname: u.fileName, mimetype: u.mimeType, size: u.size }, u.albumId, req.session.userId, key, enc);
+    db.photos.push(rec);
+    saveDB(db);
+    cleanupPending(uploadId);
+    res.json({ uploaded: [{ id: rec.id, name: u.fileName }], errors: [] });
+  } catch (e) {
+    console.error('Chunked upload finish error', u.fileName, e.message);
+    cleanupPending(uploadId);
+    res.status(500).json({ error: 'Processing failed' });
+  }
+});
+
+app.post('/api/photos/upload-cancel', requireAuth, (req, res) => {
+  const uploadId = String((req.body || {}).uploadId || '');
+  const u = pendingUploads.get(uploadId);
+  if (u && u.userId === req.session.userId) cleanupPending(uploadId);
+  res.json({ success: true });
 });
 
 // ═══ SHARE / UNSHARE ══════════════════════════════════════════════

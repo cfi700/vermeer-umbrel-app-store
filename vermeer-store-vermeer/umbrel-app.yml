@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "1.9.6"
+version: "1.10.0"
 tagline: Encrypted photo albums – private by design
 description: >-
   Vermeer stores your photos AES-256 encrypted on your Umbrel.
@@ -24,12 +24,14 @@ description: >-
   Default login: admin / admin (change immediately!)
 
 releaseNotes: >-
-  1.9.6 – Link photos into multiple albums without duplicating them.
-  A photo keeps its home album but can appear in themed albums too
-  (e.g. link river photos from several trips into a Rivers album).
-  Linking is allowed between albums with the same sharing context;
-  linked tiles show a link badge and can be removed from an album
-  without deleting the original.
+  1.10.0 – Chunked upload: large files are now split into 32 MB parts
+  on the client, uploaded individually (with per-part retry) and
+  reassembled on the server before encryption. This works around the
+  100 MB request-body limit of Cloudflare Tunnel (free plan), so
+  videos up to 200 MB can be uploaded remotely. Multiple small files
+  are batched so no single request exceeds ~90 MB either. Real upload
+  progress bar. Includes 1.9.7 (reliable Android back navigation) and
+  1.9.8 (lightbox size limits: photos 1200 px, videos 800 px).
 
 developer: Vermeer
 website: https://github.com/cfi700/vermeer-umbrel-app-store
