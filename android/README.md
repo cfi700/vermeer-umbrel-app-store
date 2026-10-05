@@ -9,7 +9,7 @@ Keine Play-Store-Veröffentlichung – die APK wird direkt über GitHub geladen:
 
 | Funktion | Umsetzung |
 |---|---|
-| Server wählen | Beim ersten Start Adresse eingeben (z. B. `http://umbrel.local:3769` oder die Tunnel-Adresse). Geprüft wird über `/api/health`. Ändern später unter **Konto → App** oder auf dem Anmeldebildschirm. |
+| Server wählen | Beim ersten Start Adresse eingeben (z. B. `http://umbrel.local:3769` oder die Tunnel-Adresse). Geprüft wird über `/api/health`. Ändern später unter **Konto → Android-App** oder auf dem Anmeldebildschirm. |
 | Handy-Ansicht | Die Web-UI erkennt die App am User-Agent (`VermeerAndroid/x.y.z`) und schaltet auf die Handy-Darstellung. |
 | Upload | Android-Dateiauswahl inkl. Mehrfachauswahl (Fotos, Videos, PDFs, GIFs). |
 | Videos | Vollbild über den Player-Knopf. |
