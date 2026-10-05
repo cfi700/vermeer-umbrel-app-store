@@ -1027,6 +1027,29 @@
   </div>
 </div>
 
+<!-- MODAL: Album verschieben (2.8.0) -->
+<div class="modal-backdrop" id="modal-album-move">
+  <div class="modal modal-lg">
+    <h2 id="amove-title"></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px" data-i18n="amove.hint"></p>
+    <div class="perm-tree" id="amove-tree"></div>
+    <div id="amove-pins"></div>
+    <div id="amove-nested" class="info-box" style="display:none;margin-top:12px"></div>
+    <div id="amove-lock" class="info-box" style="display:none;margin-top:12px">
+      <p style="margin-bottom:8px" data-i18n="amove.lock_q"></p>
+      <label class="perm-album-item" style="text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);margin-bottom:0"><input type="radio" name="amove-lock" value="keep" checked><span data-i18n="amove.lock_keep"></span></label>
+      <label class="perm-album-item" style="text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);margin-bottom:0"><input type="radio" name="amove-lock" value="remove"><span data-i18n="amove.lock_remove"></span></label>
+      <div class="form-group" id="amove-pw-group" style="display:none;margin-top:8px"><label data-i18n="account.current_pw"></label><input type="password" id="amove-pw" autocomplete="current-password"></div>
+    </div>
+    <div id="amove-access" class="info-box" style="display:none;margin-top:12px"></div>
+    <div id="amove-err" class="error-msg" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAlbumMoveModal()" data-i18n="btn.cancel"></button>
+      <button class="btn btn-primary" id="amove-confirm-btn" onclick="doAlbumMove()" disabled></button>
+    </div>
+  </div>
+</div>
+
 <div id="stat-preview-backdrop" onclick="if(event.target===this)closeStatPreview()">
   <div class="stat-preview-card">
     <div class="stat-preview-title" id="stat-preview-title"></div>
@@ -1201,6 +1224,22 @@ const T = {
     'move.count':(n)=>`${n} Foto${n!==1?'s':''} ausgewählt – Zielalbum wählen:`,
     'move.no_targets':'Keine passenden Zielalben vorhanden.',
     'move.done':(n)=>`${n} Foto${n!==1?'s':''} verschoben`,'move.failed':'fehlgeschlagen',
+    'amove.btn':'Verschieben','amove.title':(n)=>`Album »${n}« verschieben`,
+    'amove.hint':'Neues übergeordnetes Album wählen – das Album wandert samt allen Unteralben mit:',
+    'amove.root':'Oberste Ebene','amove.current':'(aktueller Ort)',
+    'amove.confirm':'Hierher verschieben','amove.confirm_access':'Trotzdem verschieben',
+    'amove.pin_label':(n)=>`PIN für »${n}«`,'amove.pin_missing':'Bitte die PIN eingeben.',
+    'amove.nested':(r)=>`Das Ziel liegt im versteckten Album »${r}«. Dessen PIN öffnet künftig auch dieses Album.`,
+    'amove.nested_own':'Die eigene PIN dieses Albums ruht so lange und gilt wieder, sobald es aus dem versteckten Bereich herausgeschoben wird.',
+    'amove.lock_q':'Das Album liegt bisher in einem versteckten Album und verliert am neuen Ort diesen Sichtschutz.',
+    'amove.lock_keep':'Sperre mitnehmen – das Album wird selbst versteckt und behält die bisherige PIN',
+    'amove.lock_remove':'Ohne Sperre verschieben (Kontopasswort erforderlich)',
+    'amove.pw_missing':'Bitte das Kontopasswort eingeben.','amove.pw_wrong':'Kontopasswort falsch.',
+    'amove.access_title':'Durch das Verschieben ändert sich, wer Inhalte dieses Albums sehen kann:',
+    'amove.access_gained':(l)=>`Neu sichtbar für: ${l}`,'amove.access_lost':(l)=>`Nicht mehr sichtbar für: ${l}`,
+    'amove.access_note':'Die Fotos werden dafür passend neu verschlüsselt.',
+    'amove.done':'Album verschoben','amove.done_lock':'Album verschoben – Sperre mitgenommen',
+    'amove.unlinked':(n)=>`${n} Verlinkung${n!==1?'en':''} gelöst`,
     'move.all_failed':'Verschieben fehlgeschlagen','cover.set':'Album-Cover gesetzt','cover.removed':'Album-Cover entfernt',
     'nav.observers':'Beobachter',
     'obs.title':'Meine Beobachter','obs.new':'+ Neuer Beobachter',
@@ -1402,6 +1441,22 @@ const T = {
     'move.count':(n)=>`${n} photo${n!==1?'s':''} selected – choose target album:`,
     'move.no_targets':'No suitable target albums available.',
     'move.done':(n)=>`${n} photo${n!==1?'s':''} moved`,'move.failed':'failed',
+    'amove.btn':'Move','amove.title':(n)=>`Move album "${n}"`,
+    'amove.hint':'Choose the new parent album – the album moves together with all its sub-albums:',
+    'amove.root':'Top level','amove.current':'(current location)',
+    'amove.confirm':'Move here','amove.confirm_access':'Move anyway',
+    'amove.pin_label':(n)=>`PIN for "${n}"`,'amove.pin_missing':'Please enter the PIN.',
+    'amove.nested':(r)=>`The target lies inside the hidden album "${r}". From now on its PIN also opens this album.`,
+    'amove.nested_own':'This album\'s own PIN stays dormant and applies again as soon as the album is moved out of the hidden area.',
+    'amove.lock_q':'The album currently lies inside a hidden album and loses that privacy lock at the new location.',
+    'amove.lock_keep':'Keep the lock – the album becomes hidden itself and keeps the current PIN',
+    'amove.lock_remove':'Move without lock (account password required)',
+    'amove.pw_missing':'Please enter your account password.','amove.pw_wrong':'Wrong account password.',
+    'amove.access_title':'Moving changes who can see the contents of this album:',
+    'amove.access_gained':(l)=>`Newly visible to: ${l}`,'amove.access_lost':(l)=>`No longer visible to: ${l}`,
+    'amove.access_note':'The photos will be re-encrypted accordingly.',
+    'amove.done':'Album moved','amove.done_lock':'Album moved – lock kept',
+    'amove.unlinked':(n)=>`${n} link${n!==1?'s':''} removed`,
     'move.all_failed':'Move failed','cover.set':'Album cover set','cover.removed':'Album cover removed',
     'nav.observers':'Observers',
     'obs.title':'My Observers','obs.new':'+ New Observer',
@@ -2327,7 +2382,8 @@ async function relockIfLeavingHidden(targetId){
   const tgt=targetId?allAlbums.find(x=>x.id===targetId):null;
   const tgtRoot=(tgt&&tgt.effectiveHidden)?(tgt.hiddenRootId||targetId):null;
   if(curRoot!==tgtRoot){
-    try{await fetch(`/api/albums/${curRoot}/relock`,{method:'POST'});}catch{}
+    // Antwort ganz lesen: erst dann ist die Sitzung gespeichert (2.8.0)
+    try{await (await fetch(`/api/albums/${curRoot}/relock`,{method:'POST'})).text();}catch{}
   }
 }
 async function selectAlbum(id){
@@ -2385,6 +2441,11 @@ async function loadAlbumContent(albumId){
     btnNew.textContent=isHome?t('albums.new_root'):t('albums.new_sub');
     btnNew.onclick=()=>openNewAlbumModal(isHome?null:albumId);
     if(me.type!=='observer')tacts.appendChild(btnNew);
+  }
+  if(!isHome&&album.canManage){
+    const btnMove=document.createElement('button');btnMove.className='btn btn-ghost btn-sm';
+    btnMove.textContent='📂 '+t('amove.btn');btnMove.onclick=()=>openAlbumMoveModal(album);
+    tacts.appendChild(btnMove);
   }
   if(!isHome&&album.canManage){
     const btnSort=document.createElement('button');btnSort.className='btn btn-ghost btn-sm';
@@ -2485,6 +2546,7 @@ function buildAlbumTile(a){
       b.addEventListener('click',e=>{e.stopPropagation();fn();});return b;};
     acts.appendChild(mk('✏️',t('albums.rename'),()=>openEditAlbumModal(a)));
     acts.appendChild(mk(a.hidden?'👁':'🕶',a.hidden?t('hide.unhide_btn'):t('hide.btn'),()=>openHideModal(a)));
+    acts.appendChild(mk('📂',t('amove.btn'),()=>openAlbumMoveModal(a)));
     acts.appendChild(mk('🗑',t('albums.delete'),()=>deleteAlbum(a.id)));
     tile.appendChild(acts);
     // Long-Press (Mobil) zeigt Aktionen
@@ -3646,6 +3708,134 @@ async function deleteAlbum(id){
   const r=await fetch(`/api/albums/${id}`,{method:'DELETE'});
   if(r.ok){toast(t('albums.deleted'),'success');if(currentAlbumId===id){currentAlbumId=null;document.getElementById('album-content').innerHTML=`<div class="no-album-selected"><div class="big-icon">📁</div><p>${t('albums.select_hint')}</p></div>`;}loadAlbums();}
   else toast((await r.json()).error,'error');
+}
+
+// ── Album verschieben (2.8.0) ──
+// Ziele: Alben desselben Besitzers, die ich verwalten darf, außer dem Album
+// selbst und seinen Unteralben. Gesperrte Quelle/Ziel werden im Dialog per
+// PIN geöffnet und danach wieder gesperrt (außer dem gerade geöffneten Album).
+let amoveAlbum=null,amoveTarget=undefined,amoveConfirmAccess=false;
+function amoveSubtree(id){const out=new Set([id]);let grew=true;
+  while(grew){grew=false;allAlbums.forEach(a=>{if(a.parentId&&out.has(a.parentId)&&!out.has(a.id)){out.add(a.id);grew=true;}});}
+  return out;}
+function amoveRootOf(a){return a&&a.effectiveHidden?(a.hiddenRootId||a.id):null;}
+function openAlbumMoveModal(album){
+  amoveAlbum=album;amoveTarget=undefined;amoveConfirmAccess=false;
+  document.getElementById('amove-title').textContent=t('amove.title',album.name);
+  document.getElementById('amove-pw').value='';
+  document.querySelector('input[name="amove-lock"][value="keep"]').checked=true;
+  document.getElementById('amove-pw-group').style.display='none';
+  const sub=amoveSubtree(album.id);
+  const cands=allAlbums.filter(a=>!sub.has(a.id)&&a.id!=='__shared__'&&a.canManage&&a.ownerId===album.ownerId);
+  const candIds=new Set(cands.map(a=>a.id));
+  const row=(id,label,depth,extra)=>`<label class="perm-album-item" style="padding-left:${8+depth*16}px">
+      <input type="radio" name="amove-target" value="${id}"${(album.parentId||'')===id?' disabled':''}>
+      <span>${label}</span>${extra?`<span style="color:var(--muted);font-size:11px;margin-left:6px">${extra}</span>`:''}</label>`;
+  const walk=(list,depth)=>list.sort((x,y)=>x.name.localeCompare(y.name)).map(a=>
+    row(a.id,`${a.locked?'🔒 ':(a.effectiveHidden?'🕶 ':'')}${esc(a.name)}`,depth,(album.parentId===a.id)?t('amove.current'):'')
+    +walk(cands.filter(c=>c.parentId===a.id),depth+1)).join('');
+  // Kandidaten, deren Elternalbum kein Kandidat ist, erscheinen auf oberster Ebene
+  const tops=cands.filter(a=>!a.parentId||!candIds.has(a.parentId));
+  document.getElementById('amove-tree').innerHTML=row('',`⌂ ${esc(t('amove.root'))}`,0,album.parentId?'':t('amove.current'))+walk(tops,1);
+  document.querySelectorAll('input[name="amove-target"]').forEach(r=>r.addEventListener('change',e=>{
+    amoveTarget=e.target.value||null;amoveConfirmAccess=false;amoveRefresh();}));
+  amoveRefresh();
+  document.getElementById('modal-album-move').classList.add('open');
+}
+function amoveRefresh(){
+  const album=amoveAlbum,btn=document.getElementById('amove-confirm-btn');
+  document.getElementById('amove-err').style.display='none';
+  const acc=document.getElementById('amove-access');
+  if(!amoveConfirmAccess){acc.style.display='none';acc.innerHTML='';}
+  btn.textContent=amoveConfirmAccess?t('amove.confirm_access'):t('amove.confirm');
+  btn.disabled=amoveTarget===undefined;
+  const target=amoveTarget?allAlbums.find(a=>a.id===amoveTarget):null;
+  // PIN-Felder für gesperrte Quelle bzw. gesperrtes Ziel (je Sperr-Album nur einmal)
+  const need=[];
+  [album,target].forEach(a=>{if(a&&a.locked){const r=amoveRootOf(a);if(!need.includes(r))need.push(r);}});
+  const pins=document.getElementById('amove-pins');
+  const keep={};pins.querySelectorAll('input[data-root]').forEach(i=>keep[i.dataset.root]=i.value);
+  pins.innerHTML=need.map(r=>{const ra=allAlbums.find(x=>x.id===r);
+    return `<div class="form-group" style="margin-top:12px"><label>${esc(t('amove.pin_label',ra?ra.name:'?'))}</label>
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" class="pin-input" data-root="${r}" placeholder="••••" autocomplete="off"></div>`;}).join('');
+  pins.querySelectorAll('input[data-root]').forEach(i=>{if(keep[i.dataset.root])i.value=keep[i.dataset.root];});
+  // B1: Ziel liegt in einem versteckten Bereich → dessen PIN gilt
+  const nested=document.getElementById('amove-nested');
+  const tRoot=amoveRootOf(target);
+  if(amoveTarget!==undefined&&tRoot){
+    const ra=allAlbums.find(x=>x.id===tRoot);
+    nested.textContent=t('amove.nested',ra?ra.name:'?')+(album.hidden?' '+t('amove.nested_own'):'');
+    nested.style.display='block';
+  } else nested.style.display='none';
+  // C1/C2: Album verliert durch den Umzug seinen geerbten Sichtschutz
+  const losesLock=amoveTarget!==undefined&&album.effectiveHidden&&!album.hidden&&!tRoot;
+  document.getElementById('amove-lock').style.display=losesLock?'block':'none';
+}
+document.querySelectorAll('input[name="amove-lock"]').forEach(r=>r.addEventListener('change',()=>{
+  document.getElementById('amove-pw-group').style.display=
+    document.querySelector('input[name="amove-lock"]:checked').value==='remove'?'block':'none';
+  amoveConfirmAccess=false;amoveRefresh();   // mit/ohne Sperre sehen ggf. andere Personen das Album
+}));
+let amoveUnlocked=[];
+async function closeAlbumMoveModal(moved){
+  closeModal('modal-album-move');
+  // Im Dialog geöffnete Sperren wieder schließen – außer der, in der ich mich
+  // gerade befinde. Nach einem Umzug zählt dafür die frische Albenliste (nur
+  // die Daten, noch ohne Neuzeichnen). Erst danach wird gerendert: parallele
+  // Anfragen (Cover, Fotos) schreiben beim Datei-Store per "touch" den alten
+  // Sitzungsstand zurück und könnten eine gerade gesetzte Sperre aufheben.
+  if(moved){try{allAlbums=await (await fetch('/api/albums')).json();}catch{}}
+  const cur=currentAlbumId?allAlbums.find(a=>a.id===currentAlbumId):null;
+  const curRoot=amoveRootOf(cur);
+  const toRelock=amoveUnlocked.filter(r=>r!==curRoot);amoveUnlocked=[];
+  for(const r of toRelock){try{await (await fetch(`/api/albums/${r}/relock`,{method:'POST'})).text();}catch{}}
+  if(moved||toRelock.length)await loadAlbums();
+}
+async function doAlbumMove(){
+  if(!amoveAlbum||amoveTarget===undefined)return;
+  const errEl=document.getElementById('amove-err');errEl.style.display='none';
+  const fail=msg=>{errEl.textContent=msg;errEl.style.display='block';};
+  // 1. Gesperrte Quelle/Ziel per PIN öffnen
+  for(const i of document.querySelectorAll('#amove-pins input[data-root]')){
+    const r=i.dataset.root;if(amoveUnlocked.includes(r))continue;
+    if(!/^\d{4}$/.test(i.value))return fail(t('amove.pin_missing'));
+    const ur=await api('POST',`/api/albums/${r}/unlock`,{pin:i.value});
+    // Antwort vollständig lesen: express-session hält das letzte Byte zurück, bis
+    // die Sitzung gespeichert ist – sonst sähe der folgende Request die Entsperrung nicht.
+    const d=await ur.json().catch(()=>({}));
+    if(!ur.ok)return fail(d.error==='Wrong PIN'?t('pin.wrong'):(d.error||t('error')));
+    amoveUnlocked.push(r);
+  }
+  // 2. Sperr-Entscheidung (C1/C2)
+  const body={parentId:amoveTarget,confirm:amoveConfirmAccess};
+  if(document.getElementById('amove-lock').style.display!=='none'){
+    body.lock=document.querySelector('input[name="amove-lock"]:checked').value;
+    if(body.lock==='remove'){body.password=document.getElementById('amove-pw').value;if(!body.password)return fail(t('amove.pw_missing'));}
+  }
+  const r=await api('PUT',`/api/albums/${amoveAlbum.id}/parent`,body);
+  const data=await r.json().catch(()=>({}));
+  if(r.status===409&&data.code==='CONFIRM_ACCESS'){
+    // 3. D1: Freigabe-Änderung anzeigen und ausdrücklich bestätigen lassen
+    const acc=document.getElementById('amove-access');
+    acc.innerHTML=`<p style="margin-bottom:6px">${esc(t('amove.access_title'))}</p>`
+      +(data.gained.length?`<p>➕ ${esc(t('amove.access_gained',data.gained.join(', ')))}</p>`:'')
+      +(data.lost.length?`<p>➖ ${esc(t('amove.access_lost',data.lost.join(', ')))}</p>`:'')
+      +`<p style="margin-top:6px;color:var(--muted)">${esc(t('amove.access_note'))}</p>`;
+    acc.style.display='block';amoveConfirmAccess=true;
+    document.getElementById('amove-confirm-btn').textContent=t('amove.confirm_access');
+    return;
+  }
+  if(!r.ok){
+    if(data.code==='PASSWORD')return fail(t('amove.pw_wrong'));
+    if(data.code==='LOCKED')return fail(t('album.locked_toast'));
+    return fail(data.error||t('error'));
+  }
+  let msg=data.lockKept?t('amove.done_lock'):t('amove.done');
+  if(data.unlinked)msg+=' · '+t('amove.unlinked',data.unlinked);
+  toast(msg,'success');
+  if(data.lockKept)amoveUnlocked.push(amoveAlbum.id);   // mitgenommene Sperre ist nur für diesen Vorgang offen
+  amoveAlbum=null;
+  await closeAlbumMoveModal(true);
 }
 
 // ═══════════════════════════════════════════════════════════════════

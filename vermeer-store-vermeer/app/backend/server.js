@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.8.0';
 
 // ─── PDF-Dokumente (2.6.0) ────────────────────────────────────────
 // Ein PDF ist aus Sicht der Speicherung exakt ein Foto: eine Ganzdatei,
@@ -1374,8 +1374,11 @@ app.put('/api/albums/:id/hide', requireAuth, (req, res) => {
 
 app.post('/api/albums/:id/relock', requireAuth, (req, res) => {
   const db = loadDB();
-  const root = hiddenRootFor(db, req.params.id) || req.params.id;
-  req.session.unlockedAlbums = (req.session.unlockedAlbums || []).filter(id => id !== root);
+  // 2.8.0: Steht die ID selbst in der Liste (z. B. ein Album, das gerade
+  // verschoben wurde), wird genau sie gesperrt – sonst wie bisher ihr Sperr-Album.
+  const list = req.session.unlockedAlbums || [];
+  const root = list.includes(req.params.id) ? req.params.id : (hiddenRootFor(db, req.params.id) || req.params.id);
+  req.session.unlockedAlbums = list.filter(id => id !== root);
   res.json({ success: true });
 });
 
@@ -1429,6 +1432,144 @@ app.delete('/api/albums/:id', requireAuth, (req, res) => {
   db.users.forEach(u => { u.canViewAlbums = (u.canViewAlbums || []).filter(id => !toDelete.includes(id)); });
   db.albums = db.albums.filter(a => !toDelete.includes(a.id));
   saveDB(db); res.json({ success: true });
+});
+
+// ═══ ALBUM VERSCHIEBEN (2.8.0) ════════════════════════════════════
+// Ein Album samt Unteralben bekommt ein neues übergeordnetes Album (oder
+// wird zur obersten Ebene). Technisch ändert sich nur `parentId` – aber
+// Sichtschutz, Freigaben und Schlüsselkontext erben über die Kette der
+// Vorfahren, deshalb wird alles davon hier mitgezogen:
+//  - Sperre in Sperre (B1): ein verstecktes Album unter einem versteckten
+//    Album behält seine PIN, sie ruht aber – es gilt die PIN des obersten
+//    versteckten Vorfahren (`hiddenRootFor`). Herausgezogen gilt sie wieder.
+//  - Sperre verlassen (C1/C2): war das Album nur über einen Vorfahren
+//    versteckt und landet es außerhalb jeder Sperre, nimmt es die Sperre mit
+//    (`lock:'keep'`, Default: PIN-Hash des bisherigen Sperr-Albums wird
+//    kopiert) oder verliert sie gegen das Kontopasswort (`lock:'remove'`,
+//    wie beim Aufheben einer Sperre über PUT /hide).
+//  - Freigaben (D1): ändert sich, wer das Album (oder ein Unteralbum) sehen
+//    kann, antwortet der Server zuerst mit 409 `CONFIRM_ACCESS` samt Namen;
+//    erst mit `confirm:true` wird verschoben. Fotos werden für den neuen
+//    Kontext umgeschlüsselt (`reencryptPending` → `migrateUserPhotos`),
+//    unverträgliche Links gelöst, verwaiste Cover-Verweise entfernt.
+function albumMoveError(db, album, parentId) {
+  if (parentId === null) return null;
+  if (parentId === SHARED_ALBUM_ID) return { status: 400, error: 'Invalid target album' };
+  const target = db.albums.find(a => a.id === parentId);
+  if (!target) return { status: 404, error: 'Target album not found' };
+  if (parentId === album.id || descendantAlbumIds(db, album.id).includes(parentId))
+    return { status: 400, error: 'Cannot move an album into itself or its sub-albums', code: 'CYCLE' };
+  // Fotos sind mit den Schlüsseln des Besitzers verschlüsselt – ein Album
+  // kann deshalb nur innerhalb der Alben desselben Besitzers wandern.
+  if (target.ownerId !== album.ownerId) return { status: 400, error: 'Target album belongs to another user', code: 'OTHER_OWNER' };
+  return null;
+}
+// Wer (außer Besitzer und Admins, die ohnehin alles sehen) sieht welche
+// Alben des Teilbaums? Grundlage für die Bestätigung bei Freigabe-Änderung.
+function subtreeAudience(db, ids, ownerId) {
+  const res = new Map();
+  db.users.forEach(u => {
+    if (u.type === 'admin' || u.id === ownerId) return;
+    const vis = new Set(visibleAlbumIds(db, u.id));
+    const seen = ids.filter(id => vis.has(id));
+    if (seen.length) res.set(u.id, new Set(seen));
+  });
+  return res;
+}
+function audienceDiff(before, after) {
+  const gained = [], lost = [];
+  new Set([...before.keys(), ...after.keys()]).forEach(uid => {
+    const b = before.get(uid) || new Set(), a = after.get(uid) || new Set();
+    if ([...a].some(id => !b.has(id))) gained.push(uid);
+    if ([...b].some(id => !a.has(id))) lost.push(uid);
+  });
+  return { gained, lost };
+}
+// Nach dem Umhängen: Fotos neu einordnen. Gibt die Anzahl vorgemerkter
+// Umschlüsselungen und gelöster Links zurück.
+function rehomeSubtreePhotos(db, ids) {
+  const sub = new Set(ids);
+  let reencrypt = 0, unlinked = 0;
+  db.photos.forEach(p => {
+    const homeInSub = sub.has(p.albumId);
+    const links = Array.isArray(p.linkedAlbumIds) ? p.linkedAlbumIds : [];
+    if (homeInSub && p.encryption && !p.shared) {
+      const targetEnc = albumIsGranted(db, p.albumId) ? 'shared' : (albumIsFamilyGranted(db, p.albumId) ? 'family' : 'user');
+      if (p.encryption !== targetEnc && !p.reencryptPending) { p.reencryptPending = true; reencrypt++; }
+    }
+    if (links.length && (homeInSub || links.some(id => sub.has(id)))) {
+      const ctx = albumKeyContext(db, p.albumId);
+      const keep = links.filter(id => albumKeyContext(db, id) === ctx);
+      unlinked += links.length - keep.length;
+      p.linkedAlbumIds = keep;
+    }
+  });
+  return { reencrypt, unlinked };
+}
+
+app.put('/api/albums/:id/parent', requireAuth, (req, res) => {
+  const { confirm, lock, password } = req.body;
+  const parentId = req.body.parentId || null;
+  const db = loadDB();
+  const album = db.albums.find(a => a.id === req.params.id);
+  if (!album) return res.status(404).json({ error: 'Album not found' });
+  if (!canManageAlbum(db, req.session.userId, album.id)) return res.status(403).json({ error: 'No permission' });
+  const err = albumMoveError(db, album, parentId);
+  if (err) return res.status(err.status).json({ error: err.error, code: err.code });
+  if (parentId && !canManageAlbum(db, req.session.userId, parentId)) return res.status(403).json({ error: 'No permission on target album' });
+  if ((album.parentId || null) === parentId) return res.json({ success: true, unchanged: true });
+  // Wie beim Foto-Verschieben: Quelle und Ziel müssen in dieser Sitzung offen sein.
+  if (effectiveHidden(db, album.id) && !isUnlocked(req, db, album.id))
+    return res.status(423).json({ error: 'Album locked', code: 'LOCKED' });
+  if (parentId && effectiveHidden(db, parentId) && !isUnlocked(req, db, parentId))
+    return res.status(423).json({ error: 'Target album locked', code: 'LOCKED' });
+
+  // C1/C2: verliert das Album durch den Umzug seinen Sichtschutz?
+  const oldRoot = hiddenRootFor(db, album.id);
+  const losesLock = !!oldRoot && !album.hidden && !(parentId && effectiveHidden(db, parentId));
+  const me = getUser(db, req);
+  if (losesLock && lock === 'remove' && (!password || !bcrypt.compareSync(password, me.passwordHash)))
+    return res.status(401).json({ error: 'Account password required to remove the lock', code: 'PASSWORD' });
+
+  // D1: Freigabe-Änderung erst nach ausdrücklicher Bestätigung.
+  const subtree = [album.id, ...descendantAlbumIds(db, album.id)];
+  const oldParentId = album.parentId || null;
+  const oldAncestors = oldParentId ? ancestorChain(db, oldParentId) : [];
+  const before = subtreeAudience(db, subtree, album.ownerId);
+  const keepsLock = losesLock && lock !== 'remove';
+  const rootAlbum = keepsLock ? db.albums.find(a => a.id === oldRoot) : null;
+  album.parentId = parentId;
+  if (keepsLock) { album.hidden = true; album.pinHash = rootAlbum.pinHash; }   // vorläufig, für die Sichtprüfung
+  const diff = audienceDiff(before, subtreeAudience(db, subtree, album.ownerId));
+  if ((diff.gained.length || diff.lost.length) && confirm !== true) {
+    const names = ids => ids.map(id => db.users.find(u => u.id === id)?.username || '?').sort();
+    // loadDB liefert bei jedem Aufruf frisch – die vorläufige Änderung wird nicht gespeichert.
+    return res.status(409).json({ error: 'Access changes', code: 'CONFIRM_ACCESS', gained: names(diff.gained), lost: names(diff.lost) });
+  }
+
+  const { reencrypt, unlinked } = rehomeSubtreePhotos(db, subtree);
+  // Cover der bisherigen Vorfahren, die jetzt auf ein Foto außerhalb ihres Teilbaums zeigen
+  oldAncestors.forEach(aid => {
+    const a = db.albums.find(x => x.id === aid);
+    if (!a?.coverPhotoId) return;
+    const cover = db.photos.find(p => p.id === a.coverPhotoId);
+    if (!cover || ![aid, ...descendantAlbumIds(db, aid)].includes(cover.albumId)) delete a.coverPhotoId;
+  });
+  saveDB(db);
+  // Sitzungs-Entsperrungen nachziehen: Wer das bisherige Sperr-Album offen
+  // hatte, hat die PIN bewiesen – das mitgenommene Album bleibt deshalb vorerst
+  // offen (das Frontend sperrt es nach dem Dialog wieder). Ein Album, dessen
+  // eigene PIN jetzt ruht (B1), fällt dagegen aus der Liste – sonst wäre es nach
+  // einem späteren Herausschieben in dieser Sitzung ohne PIN offen.
+  const unlocked = req.session.unlockedAlbums || [];
+  if (keepsLock && !unlocked.includes(album.id)) unlocked.push(album.id);
+  if (album.hidden && hiddenRootFor(db, album.id) !== album.id)
+    req.session.unlockedAlbums = unlocked.filter(id => id !== album.id);
+  else req.session.unlockedAlbums = unlocked;
+  const dek = dekCache.get(req.sessionID);
+  if (reencrypt && dek && album.ownerId === req.session.userId)
+    setImmediate(() => migrateUserPhotos(req.session.userId, dek, familyCache.get(req.sessionID)));
+  res.json({ success: true, lockKept: keepsLock, reencrypt, unlinked });
 });
 
 // ═══ UPLOAD ═══════════════════════════════════════════════════════

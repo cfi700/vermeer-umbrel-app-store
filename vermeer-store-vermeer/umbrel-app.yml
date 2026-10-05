@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "2.7.1"
+version: "2.8.0"
 tagline: Encrypted photo, video and document albums – private by design
 description: >-
   Vermeer keeps your photos, videos and PDF documents AES-256 encrypted on
@@ -26,7 +26,7 @@ description: >-
 
   - Chunked upload for large files – works behind 100 MB body limits (e.g. Cloudflare Tunnel)
 
-  - Albums and sub-albums with unlimited depth, plus linking one photo into several albums
+  - Albums and sub-albums with unlimited depth, movable at any time, plus linking one photo into several albums
 
   - Hidden albums protected by a 4-digit PIN, optionally invisible to observers
 
@@ -51,15 +51,23 @@ description: >-
 
   First login: admin / admin – change the password immediately.
 releaseNotes: >-
-  2.7.1 – Three small corrections.
+  2.8.0 – Move albums.
 
-  The login screen now places the cursor in the username field straight away,
-  so you can start typing without clicking first.
+  Albums can now be moved – together with all their sub-albums – into another
+  album or back to the top level, via the new "Move" button on the album tile
+  or in the album header.
 
-  In the statistics, the columns of "Most viewed photos" and "Most viewed
-  albums" have been reordered so that the important numbers come first: photo,
-  views, viewers, album, owner – and album, views, photos, owner. The figures
-  themselves are unchanged.
+  Hidden albums can be moved into other hidden albums. The outer album's PIN
+  then opens the inner one as well; the inner album keeps its own PIN, which
+  applies again as soon as it is moved out of the hidden area.
+
+  If an album loses its privacy lock by being moved out of a hidden album, you
+  choose: take the lock along (the album becomes hidden itself with the same
+  PIN) or move it without a lock after confirming your account password.
+
+  If moving changes who can see an album (e.g. into an album shared with
+  observers), Vermeer lists the affected people and asks for confirmation; the
+  photos are then re-encrypted for the new location automatically.
 
   Updating from 2.x keeps all data, albums and users.
 developer: Vermeer
