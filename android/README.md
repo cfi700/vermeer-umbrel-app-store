@@ -17,6 +17,7 @@ Keine Play-Store-Veröffentlichung – die APK wird direkt über GitHub geladen:
 | Zurück-Taste | Schließt Lightbox/Dialog bzw. geht ein Album hoch; auf der Startseite zweimal drücken zum Beenden. |
 | Leistenfarbe | Folgt der in Vermeer eingestellten Hintergrundfarbe. |
 | Fremde Links | Öffnen im Browser, nicht in der App. |
+| Screenshot-Schutz | Bildschirmfotos und -aufnahmen bleiben schwarz, die Vorschau in der App-Übersicht ist leer, kein Übertragen auf Screencast/Mirroring (`FLAG_SECURE`). Gilt für alle Benutzer. |
 
 Nicht enthalten (bewusst): Service Worker / Offline-Cache, Push-Benachrichtigungen,
 Speichern einzelner Bilder (Download-Schutz bleibt wie im Browser).

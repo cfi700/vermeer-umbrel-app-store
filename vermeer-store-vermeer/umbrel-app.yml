@@ -58,7 +58,8 @@ releaseNotes: >-
   There is now an optional Android app that wraps Vermeer in its own window:
   home-screen icon, no browser bar, the back button closes the lightbox or
   goes one album up, uploads straight from the gallery and the ZIP export via
-  the Android download manager. It is not in the Play Store – download the
+  the Android download manager. Screenshots and the preview in the recent-apps
+  overview are blocked inside the app. It is not in the Play Store – download the
   APK under "Account → Android app" (shown on Android phones and desktops).
   On first start, enter the address of your Vermeer server.
 

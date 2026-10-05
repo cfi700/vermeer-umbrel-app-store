@@ -42,6 +42,7 @@ public class SetupActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Privacy.secure(this);
         setContentView(R.layout.activity_setup);
         Insets.applySystemBars(findViewById(R.id.setup_root));
 

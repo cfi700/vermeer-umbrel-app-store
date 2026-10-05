@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Privacy.secure(this);
         server = ServerConfig.get(this);
         if (server == null) {
             startActivity(new Intent(this, SetupActivity.class));
