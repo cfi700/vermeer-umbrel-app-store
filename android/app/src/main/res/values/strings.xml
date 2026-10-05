@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vermeer</string>
+    <string name="setup_title">Connect to your Vermeer</string>
+    <string name="setup_desc">Enter the address of your Vermeer server – at home e.g. http://umbrel.local:3769, on the go your tunnel address (https://…).</string>
+    <string name="setup_hint">http://umbrel.local:3769</string>
+    <string name="setup_connect">Connect</string>
+    <string name="setup_use_anyway">Use this address anyway</string>
+    <string name="setup_checking">Checking connection…</string>
+    <string name="setup_empty">Please enter an address.</string>
+    <string name="setup_invalid">This is not a valid address.</string>
+    <string name="setup_not_vermeer">The server answers, but does not look like Vermeer.</string>
+    <string name="setup_failed">Connection failed: %1$s</string>
+    <string name="setup_ok">Connected – Vermeer %1$s</string>
+    <string name="setup_cancel">Cancel</string>
+    <string name="back_exit">Press back again to exit</string>
+    <string name="error_title">Server not reachable</string>
+    <string name="error_desc">%1$s could not be reached. Check your network connection or whether you are outside your home network.</string>
+    <string name="error_retry">Try again</string>
+    <string name="error_change">Change server</string>
+    <string name="download_started">Download started – see notifications</string>
+    <string name="download_failed">Download failed</string>
+    <string name="download_permission">Storage permission is needed for the export. Please try again.</string>
+    <string name="no_file_app">No app found for selecting files</string>
+</resources>

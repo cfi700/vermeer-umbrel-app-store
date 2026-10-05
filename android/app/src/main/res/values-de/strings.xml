@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">Mit deinem Vermeer verbinden</string>
+    <string name="setup_desc">Gib die Adresse deines Vermeer-Servers ein – zu Hause z. B. http://umbrel.local:3769, unterwegs deine Tunnel-Adresse (https://…).</string>
+    <string name="setup_connect">Verbinden</string>
+    <string name="setup_use_anyway">Adresse trotzdem verwenden</string>
+    <string name="setup_checking">Verbindung wird geprüft…</string>
+    <string name="setup_empty">Bitte eine Adresse eingeben.</string>
+    <string name="setup_invalid">Das ist keine gültige Adresse.</string>
+    <string name="setup_not_vermeer">Der Server antwortet, sieht aber nicht nach Vermeer aus.</string>
+    <string name="setup_failed">Verbindung fehlgeschlagen: %1$s</string>
+    <string name="setup_ok">Verbunden – Vermeer %1$s</string>
+    <string name="setup_cancel">Abbrechen</string>
+    <string name="back_exit">Erneut drücken zum Verlassen</string>
+    <string name="error_title">Server nicht erreichbar</string>
+    <string name="error_desc">%1$s ist nicht erreichbar. Prüfe die Netzwerkverbindung oder ob du außerhalb deines Heimnetzes bist.</string>
+    <string name="error_retry">Erneut versuchen</string>
+    <string name="error_change">Server ändern</string>
+    <string name="download_started">Download gestartet – siehe Benachrichtigungen</string>
+    <string name="download_failed">Download fehlgeschlagen</string>
+    <string name="download_permission">Für den Export wird die Speicher-Berechtigung benötigt. Bitte erneut versuchen.</string>
+    <string name="no_file_app">Keine App zur Dateiauswahl gefunden</string>
+</resources>

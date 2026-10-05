@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Motiv wie appIconSvg() im Server (Kreis + "V"), auf 108dp-Adaptive-Icon
+     mit 72dp-Sicherheitszone skaliert. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M36,54 a18,18 0 1,1 36,0 a18,18 0 1,1 -36,0"
+        android:strokeColor="#C8A96E"
+        android:strokeWidth="2.7"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M44.1,45 L54,65.16 L63.9,45"
+        android:strokeColor="#C8A96E"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

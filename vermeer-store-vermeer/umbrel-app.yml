@@ -2,7 +2,7 @@ manifestVersion: 1
 id: vermeer-store-vermeer
 category: files
 name: Vermeer
-version: "2.7.1"
+version: "2.8.0"
 tagline: Encrypted photo, video and document albums – private by design
 description: >-
   Vermeer keeps your photos, videos and PDF documents AES-256 encrypted on
@@ -46,20 +46,25 @@ description: >-
 
   - Installable as an app on phones and desktops (no service worker)
 
+  - Optional Android companion app (APK download, not in the Play Store)
+
   - DE / EN language toggle
 
 
   First login: admin / admin – change the password immediately.
 releaseNotes: >-
-  2.7.1 – Three small corrections.
+  2.8.0 – Android companion app and phone/desktop detection.
 
-  The login screen now places the cursor in the username field straight away,
-  so you can start typing without clicking first.
+  There is now an optional Android app that wraps Vermeer in its own window:
+  home-screen icon, no browser bar, the back button closes the lightbox or
+  goes one album up, uploads straight from the gallery and the ZIP export via
+  the Android download manager. It is not in the Play Store – download the
+  APK under "Account → Android app" (shown on Android phones and desktops).
+  On first start, enter the address of your Vermeer server.
 
-  In the statistics, the columns of "Most viewed photos" and "Most viewed
-  albums" have been reordered so that the important numbers come first: photo,
-  views, viewers, album, owner – and album, views, photos, owner. The figures
-  themselves are unchanged.
+  Vermeer now tells phones, tablets and desktops apart. Phones keep the
+  compact navigation also in landscape, and on touch devices the album
+  actions that used to appear only on mouse hover are always visible.
 
   Updating from 2.x keeps all data, albums and users.
 developer: Vermeer

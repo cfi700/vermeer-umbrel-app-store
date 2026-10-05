@@ -1,0 +1,109 @@
+# Baut die Android-Companion-App (android/).
+#
+#  - Push auf einen Branch (Aenderung unter android/): Test-APK als
+#    Workflow-Artefakt, signiert mit dem Release-Schluessel falls vorhanden,
+#    sonst mit einem Debug-Schluessel.
+#  - Tag android-vX.Y.Z: signierte APK, Release "Android X.Y.Z" und
+#    Aktualisierung des festen Download-Releases "android-latest":
+#    https://github.com/<repo>/releases/download/android-latest/vermeer-android.apk
+#
+# Schluessel-Secrets: siehe android/README.md.
+name: Android APK
+
+on:
+  push:
+    branches: ['**']
+    tags: ['android-v*']
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Version bestimmen
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/android-v* ]]; then
+            V="${GITHUB_REF#refs/tags/android-v}"
+            [[ "$V" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::Tag muss android-vX.Y.Z lauten"; exit 1; }
+            CODE=$(( BASH_REMATCH[1]*10000 + BASH_REMATCH[2]*100 + BASH_REMATCH[3] ))
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            V=$(grep '^VERSION_NAME=' android/gradle.properties | cut -d= -f2)
+            CODE=$(grep '^VERSION_CODE=' android/gradle.properties | cut -d= -f2)
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "name=$V" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Signaturschluessel bereitstellen
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "VERMEER_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Release ohne Schluessel abbrechen
+        if: steps.ver.outputs.release == 'true' && env.KEYSTORE_B64 == ''
+        run: |
+          echo "::error::Secret ANDROID_KEYSTORE_BASE64 fehlt – Releases muessen immer mit demselben Schluessel signiert sein (siehe android/README.md)."
+          exit 1
+
+      - name: APK bauen
+        working-directory: android
+        env:
+          VERMEER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VERMEER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VERMEER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease \
+            -PVERSION_NAME=${{ steps.ver.outputs.name }} \
+            -PVERSION_CODE=${{ steps.ver.outputs.code }}
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk ../dist/vermeer-android-${{ steps.ver.outputs.name }}.apk
+          cp app/build/outputs/apk/release/app-release.apk ../dist/vermeer-android.apk
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Signatur pruefen
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs dist/vermeer-android.apk | tee dist/signature.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vermeer-android-${{ steps.ver.outputs.name }}
+          path: dist/*.apk
+
+      - name: GitHub-Release veroeffentlichen
+        if: steps.ver.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.ver.outputs.name }}
+        run: |
+          NOTES="Vermeer Companion App für Android – Version $V.
+
+          Installation: APK auf dem Handy herunterladen und öffnen. Android fragt einmalig, ob der Browser bzw. Dateimanager Apps installieren darf (\"Unbekannte Apps installieren\")."
+          gh release create "android-v$V" "dist/vermeer-android-$V.apk" \
+            --title "Android $V" --notes "$NOTES" --latest=false
+          # Fester Download-Link, unabhaengig von den Server-Releases.
+          if ! gh release view android-latest >/dev/null 2>&1; then
+            gh release create android-latest --target "$GITHUB_SHA" \
+              --title "Android-App (aktuelle Version)" --latest=false \
+              --notes "Immer die neueste Vermeer-Android-App: vermeer-android.apk"
+          fi
+          gh release upload android-latest dist/vermeer-android.apk --clobber
+          gh release edit android-latest --notes "Immer die neueste Vermeer-Android-App (derzeit $V): vermeer-android.apk"

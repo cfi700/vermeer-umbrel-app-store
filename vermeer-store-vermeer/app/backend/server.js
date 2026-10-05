@@ -20,7 +20,7 @@ const FileStore = require('session-file-store')(session);
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '2.7.1';
+const APP_VERSION = '2.8.0';
 
 // ─── PDF-Dokumente (2.6.0) ────────────────────────────────────────
 // Ein PDF ist aus Sicht der Speicherung exakt ein Foto: eine Ganzdatei,

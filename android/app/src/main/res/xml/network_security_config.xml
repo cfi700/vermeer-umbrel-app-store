@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Umbrel ist im Heimnetz typischerweise nur per http erreichbar
+     (http://umbrel.local:3769). Klartext ist daher erlaubt; per Tunnel
+     (Cloudflare, Tailscale-HTTPS) laeuft alles ueber https.
+     Vom Nutzer installierte CAs werden zusaetzlich akzeptiert, damit
+     eigene Zertifikate im Heimnetz funktionieren. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

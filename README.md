@@ -18,7 +18,16 @@ vermeer-store-vermeer/
     │   └── package.json
     └── frontend/
         └── index.html                  ← Single-File UI
+android/                                ← Android-Companion-App (WebView-Hülle)
+.github/workflows/android.yml           ← baut die APK, Release per Tag android-vX.Y.Z
 ```
+
+## Android-App
+
+Optionale App für Android-Handys – kein Play Store, sondern direkter APK-Download:
+<https://github.com/cfi700/vermeer-umbrel-app-store/releases/download/android-latest/vermeer-android.apk>
+(in Vermeer auch unter **Konto → Android-App**). Details, Build und Signatur:
+[android/README.md](android/README.md).
 
 ## App installieren
 

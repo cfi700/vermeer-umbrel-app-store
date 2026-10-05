@@ -13,6 +13,21 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>Vermeer</title>
+<script>
+// Geräteklasse (2.8.0) – läuft vor dem ersten Rendern, damit das Layout nicht springt.
+// device-phone / device-tablet / device-desktop, dazu device-touch, os-android
+// und in-app (Android-Companion-App, erkennbar am User-Agent "VermeerAndroid/x.y.z").
+(function(){
+  var ua=navigator.userAgent||'',d=document.documentElement;
+  var app=/VermeerAndroid\//.test(ua);
+  var phone=/Android.+Mobile|iPhone|iPod|Windows Phone/i.test(ua);
+  var tablet=!phone&&(/iPad|Android|Tablet/i.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1));
+  d.classList.add(phone?'device-phone':tablet?'device-tablet':'device-desktop');
+  if(phone||tablet)d.classList.add('device-touch');
+  if(/Android/i.test(ua))d.classList.add('os-android');
+  if(app)d.classList.add('in-app');
+})();
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
 
@@ -453,6 +468,24 @@
     .content-toolbar{position:sticky;top:56px;z-index:50}
   }
 
+  /* ── GERÄTEKLASSEN (2.8.0) ──
+     Handys bekommen die kompakte Bedienleiste auch im Querformat (dort ist das
+     Fenster breiter als 640px); die Rasterspalten richten sich weiter nach der
+     Breite. Touch-Geräte zeigen Aktionen, die am Desktop erst beim Überfahren
+     mit der Maus erscheinen, dauerhaft. */
+  html.device-phone .navbar{padding:0 10px;gap:8px;flex-wrap:wrap;height:auto;min-height:52px}
+  html.device-phone .navbar-brand{font-size:16px}
+  html.device-phone .nav-btn{padding:6px 9px;font-size:12px}
+  html.device-phone .user-info{display:none}
+  html.device-phone .page{padding:12px 10px}
+  html.device-phone .photo-check{width:26px;height:26px}
+  html.device-phone .selection-bar.visible{position:fixed;left:8px;right:8px;bottom:8px;z-index:200;
+    box-shadow:0 6px 30px rgba(0,0,0,.6);background:var(--surface)}
+  html.device-touch .tree-actions{display:flex}
+  html.device-touch .album-tile:hover,html.device-touch .subalbum-card:hover{transform:none}
+  html:not(.in-app) .app-only{display:none !important}
+  html.in-app .browser-only{display:none !important}
+
   .stat-photo-link{color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
   .stat-photo-link:hover{opacity:.8}
   #stat-preview-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:none;align-items:center;justify-content:center;padding:20px}
@@ -493,6 +526,7 @@
     <button class="btn btn-primary btn-full" onclick="doLogin()" data-i18n="login.submit"></button>
     <div id="login-err" class="error-msg" style="display:none"></div>
     <button class="link-btn" onclick="openRecoverModal()" data-i18n="login.forgot"></button>
+    <button class="link-btn app-only" onclick="appChangeServer()" data-i18n="app.change_server"></button>
   </div>
 </div>
 
@@ -669,6 +703,22 @@
           <input type="text" id="link-code" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx-xxxx" autocomplete="off">
         </div>
         <button class="btn btn-primary" onclick="confirmLinkCode()" data-i18n="link.confirm_btn"></button>
+      </div>
+    </div>
+    <!-- Android-App (2.8.0): im Android-Browser/Desktop Download, in der App Server-Info -->
+    <div class="card" style="max-width:440px;display:none" id="app-card">
+      <div class="card-header" data-i18n="app.card"></div>
+      <div style="padding:20px">
+        <div class="browser-only">
+          <p style="color:var(--muted);font-size:13px;margin-bottom:14px" data-i18n="app.desc"></p>
+          <a class="btn btn-primary" id="app-download" href="#" rel="noopener" style="display:inline-block;text-decoration:none" data-i18n="app.download"></a>
+          <p style="color:var(--muted);font-size:12px;margin-top:12px" data-i18n="app.install_hint"></p>
+        </div>
+        <div class="app-only">
+          <p style="color:var(--muted);font-size:13px;margin-bottom:6px"><span data-i18n="app.connected"></span> <strong id="app-server" style="color:var(--text);word-break:break-all"></strong></p>
+          <p style="color:var(--muted);font-size:12px;margin-bottom:14px"><span data-i18n="app.version"></span> <span id="app-version"></span></p>
+          <button class="btn btn-ghost" onclick="appChangeServer()" data-i18n="app.change_server"></button>
+        </div>
       </div>
     </div>
     <div class="card" style="max-width:440px" id="export-card">
@@ -1111,6 +1161,10 @@ const T = {
     'users.deleted':'Benutzer gelöscht','users.created':'Benutzer erstellt',
     'users.confirm_delete':'Benutzer wirklich löschen?',
     'users.albums_count':(n)=>`${n} Album${n!==1?'en':''}`,
+    'app.card':'Android-App','app.desc':'Vermeer als App auf dem Android-Handy: eigene Kachel auf dem Startbildschirm, Vollbild, Zurück-Taste und Upload direkt aus der Galerie.',
+    'app.download':'⬇ Android-App herunterladen (APK)',
+    'app.install_hint':'Nach dem Download die Datei öffnen. Android fragt einmalig, ob Apps aus dieser Quelle installiert werden dürfen. Beim ersten Start die Adresse dieses Servers eingeben.',
+    'app.connected':'Verbunden mit','app.version':'App-Version','app.change_server':'Server wechseln',
     'account.title':'Mein Konto','account.changepw':'Passwort ändern',
     'account.current_pw':'Aktuelles Passwort','account.new_pw':'Neues Passwort',
     'account.confirm_pw':'Passwort wiederholen','account.pw_min':'Mindestens 6 Zeichen',
@@ -1312,6 +1366,10 @@ const T = {
     'users.deleted':'User deleted','users.created':'User created',
     'users.confirm_delete':'Really delete this user?',
     'users.albums_count':(n)=>`${n} album${n!==1?'s':''}`,
+    'app.card':'Android app','app.desc':'Vermeer as an app on your Android phone: its own home-screen icon, full screen, back button and uploads straight from the gallery.',
+    'app.download':'⬇ Download Android app (APK)',
+    'app.install_hint':'Open the file after downloading. Android asks once whether apps from this source may be installed. On first start, enter the address of this server.',
+    'app.connected':'Connected to','app.version':'App version','app.change_server':'Change server',
     'account.title':'My Account','account.changepw':'Change Password',
     'account.current_pw':'Current Password','account.new_pw':'New Password',
     'account.confirm_pw':'Repeat Password','account.pw_min':'At least 6 characters',
@@ -1470,6 +1528,9 @@ function updateLoggedInLabel(){const el=document.getElementById('logged-in-label
 // STATE
 // ═══════════════════════════════════════════════════════════════════
 let me=null,allAlbums=[],allUsers=[],currentAlbumId=null,currentPhotos=[];
+// Geräteklasse aus dem <head>-Skript (2.8.0): 'phone' | 'tablet' | 'desktop'
+const DEVICE=['phone','tablet','desktop'].find(d=>document.documentElement.classList.contains('device-'+d))||'desktop';
+const IN_APP=document.documentElement.classList.contains('in-app');
 let expandedAlbums=new Set(),selectedPhotos=new Set();
 let lbThumbCache={};  // persistent thumb URL cache per photo id
 let currentAlbumCanManage=false;
@@ -1623,6 +1684,9 @@ function applyGalleryColors(){
     const v=/^#[0-9a-fA-F]{6}$/.test(c[k]||'')?c[k]:COLOR_DEFAULTS[k];
     document.documentElement.style.setProperty('--'+k,v);
   });
+  const bg=/^#[0-9a-fA-F]{6}$/.test(c.bg||'')?c.bg:COLOR_DEFAULTS.bg;
+  const tc=document.querySelector('meta[name="theme-color"]');if(tc)tc.setAttribute('content',bg);
+  if(IN_APP&&window.VermeerApp&&VermeerApp.setThemeColor){try{VermeerApp.setThemeColor(bg);}catch{}}
 }
 function applyAppSettings(){
   const n=appSettings.galleryName||'Vermeer';
@@ -1737,6 +1801,9 @@ async function checkSession(){
 // Startansicht: erster Druck zeigt einen Hinweis, ein zweiter Druck
 // innerhalb von 2 Sekunden verlässt die App wirklich.
 let navReady=false,navExitArmed=false;
+// Android-App (2.8.0): ein Druck auf Zurück = eine Ebene; false = Startansicht,
+// die App entscheidet dann selbst über das Beenden.
+window.vermeerNativeBack=function(){try{return handleInAppBack();}catch(e){return false;}};
 function setupBackNav(){
   if(navReady)return; navReady=true;
   history.replaceState({v:'base'},'');
@@ -1839,7 +1906,10 @@ function bootApp(){
   }
   applyTranslations();loadAlbums();
   setupAutoLogout();
-  setupBackNav();
+  setupAppCard();
+  // In der Android-App ruft die native Zurück-Taste vermeerNativeBack() auf;
+  // der History-Guard für Browser wird dort nicht gebraucht.
+  if(!IN_APP)setupBackNav();
 }
 
 // ── NAVIGATION ──────────────────────────────────────────────────────
@@ -2288,6 +2358,26 @@ async function leaveLink(ownerId){
 
 // ── Export ──
 function doExport(){window.location='/api/export';}
+
+// ── Android-App (2.8.0) ──
+// Fester Release-Tag, damit der Link nicht von den Server-Releases abhängt.
+const ANDROID_APK_URL='https://github.com/cfi700/vermeer-umbrel-app-store/releases/download/android-latest/vermeer-android.apk';
+function setupAppCard(){
+  const card=document.getElementById('app-card');if(!card)return;
+  // In der App: Server-Info. Im Browser: Download-Angebot für Android-Handys
+  // und Desktop (zum Weitergeben); iPhone/iPad nutzen "Zum Home-Bildschirm".
+  const show=IN_APP||document.documentElement.classList.contains('os-android')||DEVICE==='desktop';
+  card.style.display=show?'':'none';
+  if(IN_APP){
+    let srv=location.origin,ver='?';
+    try{srv=VermeerApp.server()||srv;ver=VermeerApp.version()||ver;}catch{}
+    document.getElementById('app-server').textContent=srv;
+    document.getElementById('app-version').textContent=ver;
+  }else{
+    document.getElementById('app-download').href=ANDROID_APK_URL;
+  }
+}
+function appChangeServer(){try{if(window.VermeerApp)VermeerApp.changeServer();}catch{}}
 
 // ── Swipe-Back (Mobil): von linker Kante nach rechts wischen = Ebene hoch ──
 (function(){

@@ -1,0 +1,50 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Signatur fuer Release-Builds kommt ausschliesslich aus Umgebungsvariablen
+// (GitHub-Secrets, siehe android/README.md). Ohne sie wird mit dem
+// Debug-Schluessel signiert – installierbar, aber nicht update-kompatibel
+// zu signierten Releases.
+def ksFile = System.getenv('VERMEER_KEYSTORE_FILE')
+def hasReleaseKey = ksFile && file(ksFile).exists()
+
+android {
+    namespace 'de.vermeer.companion'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'de.vermeer.companion'
+        minSdk 26
+        targetSdk 35
+        versionCode Integer.parseInt(project.property('VERSION_CODE').toString())
+        versionName project.property('VERSION_NAME').toString()
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(ksFile)
+                storePassword System.getenv('VERMEER_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('VERMEER_KEY_ALIAS')
+                keyPassword System.getenv('VERMEER_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
